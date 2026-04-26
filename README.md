@@ -13,7 +13,7 @@ $ woman kill whatever is hogging port 3000
 
 ## Why this exists
 
-It was late. I forgot a `tar` flag. Again. I typed `man tar`, got my answer, and moved on.
+It was late. I forgot a `nmap` flag. Again. I typed `man nmap`, got my answer, and moved on.
 
 Then I thought: there's a `man` command. There's no `woman` command. Not for any real reason. Nobody just... did it. And that felt a little sad.
 
