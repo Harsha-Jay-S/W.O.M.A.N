@@ -156,9 +156,11 @@ def inject_context(command: str, context: str, query: str) -> str:
         if in_files and line.strip() == "": continue
         if in_files and "Recent shell history" in line: break
         if in_files:
-            for f in line.split():
-                if f not in (".", ".."):
-                    files.append(f)
+            # `ls -a` in non-interactive mode outputs one entry per line,
+            # so treat the whole line as the filename (preserves spaces in names)
+            f = line.strip()
+            if f and f not in (".", ".."):
+                files.append(f)
                     
     if files:
         selected_file = files[0]  # Default to first file
@@ -197,12 +199,15 @@ def call_tldr(query: str, context: str = "") -> str:
     if not cache_dir.exists():
         try:
             print(f"{DIM}Downloading local tldr database for the first time...{RESET}".ljust(60), file=sys.stderr, end="\r")
-            url = "https://tldr.sh/assets/tldr.zip"
-            cache_dir.mkdir(parents=True, exist_ok=True)
+            # Use GitHub releases URL; tldr.sh/assets may return 403
+            url = "https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip"
             req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
             with urllib.request.urlopen(req, timeout=TIMEOUT_TLDR_DOWNLOAD) as response:
-                with zipfile.ZipFile(io.BytesIO(response.read())) as z:
-                    z.extractall(cache_dir)
+                data = response.read()
+            # Only create the directory after a successful download
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(io.BytesIO(data)) as z:
+                z.extractall(cache_dir)
         except (urllib.error.URLError, zipfile.BadZipFile):
             return ""
             
@@ -448,12 +453,14 @@ def main():
     print(" " * 60, file=sys.stderr, end="\r")
 
     # Sanitize markdown artifacts safely
-    command = command.strip().strip("`")
-    if command.startswith("```"): 
-        command = "\n".join(command.splitlines()[1:])
-    if command.endswith("```"): 
-        command = "\n".join(command.splitlines()[:-1])
+    # Must check for fenced blocks BEFORE stripping backtick chars,
+    # otherwise ```bash becomes "bash\n..." after strip("`")
     command = command.strip()
+    if command.startswith("```"):
+        command = "\n".join(command.splitlines()[1:])  # drop ```[lang] line
+    if command.endswith("```"):
+        command = "\n".join(command.splitlines()[:-1])  # drop closing ```
+    command = command.strip().strip("`").strip()
 
     # Print
     print(f"\n  {CYAN}{BOLD}{command}{RESET}\n")

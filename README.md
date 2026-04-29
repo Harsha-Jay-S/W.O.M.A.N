@@ -13,7 +13,7 @@ $ woman kill whatever is hogging port 3000
 
 ## Why this exists
 
-It was late. I forgot a `nmap` flag. Again. I typed `man nmap`, got my answer, and moved on.
+It was late. I forgot a `tar` flag. Again. I typed `man tar`, got my answer, and moved on.
 
 Then I thought: there's a `man` command. There's no `woman` command. Not for any real reason. Nobody just... did it. And that felt a little sad.
 
@@ -25,9 +25,13 @@ So I built one over a weekend, mostly for fun, partly out of spite for a naming 
 
 ## What it does
 
-You type what you want in plain English. `woman` gathers some context first: your OS, the files in your current directory, your last 5 shell commands. Then it asks an LLM for the right command, prints the result, and asks if you want to run it.
+You type what you want in plain English. `woman` gathers context first — your OS, the files in your current directory, your last 5 shell commands — then works through three backends in order until it finds an answer:
 
-That's the whole thing.
+1. **LLM** (OpenAI, Anthropic, or Ollama) — if you have a key or a local server, this runs first. It gets the full context and returns a command tailored to your exact setup.
+2. **Local tldr cache** — if no LLM is configured, or if the LLM fails, it searches a local offline copy of [tldr-pages](https://tldr.sh). Fast, no network needed after the first run.
+3. **cheat.sh** — last resort. Hits the cheat.sh API, which needs no key and covers a broad range of commands.
+
+You don't need an API key to use `woman`. The LLM just gives better, more context-aware answers than the fallbacks.
 
 ---
 
@@ -58,13 +62,17 @@ chmod +x ~/.local/bin/woman.py
 
 ### 2. Install dependencies
 
+The LLM backends are optional. Install only what you need:
+
 ```bash
-pip install openai        # OpenAI (default)
+pip install openai        # OpenAI
 pip install anthropic     # Anthropic / Claude
 pip install requests      # Ollama (local models)
 ```
 
-### 3. Set your API key
+No key? Skip this entirely. `woman` will fall back to tldr and cheat.sh automatically.
+
+### 3. Set your API key (optional)
 
 In your `~/.bashrc` or `~/.zshrc`:
 
@@ -100,6 +108,8 @@ source ~/.bashrc   # or: source ~/.zshrc
 | `OPENAI_API_KEY` | Your OpenAI key | — |
 | `ANTHROPIC_API_KEY` | Your Anthropic key | — |
 | `OLLAMA_HOST` | Your Ollama server URL | `http://localhost:11434` |
+
+No key set at all? `woman` skips straight to the tldr cache, then cheat.sh.
 
 ```bash
 # Anthropic
@@ -158,12 +168,28 @@ woman "your query"
  └─────────────────────────┘
        │
        ▼
- LLM Call (OpenAI / Anthropic / Ollama)
+ Tier 1 — LLM (if configured)
  ┌─────────────────────────────────────────────┐
+ │ OpenAI / Anthropic / Ollama                 │
  │ System: "Return ONLY the raw command.       │
  │          No markdown. No explanation.       │
  │          No yapping."                       │
  │ User:   query + all gathered context        │
+ └─────────────────────────────────────────────┘
+       │ no key set, or LLM call fails
+       ▼
+ Tier 2 — Local tldr cache (offline, fast)
+ ┌─────────────────────────────────────────────┐
+ │ Downloaded once to ~/.cache/woman/tldr      │
+ │ Searches tldr-pages for a matching command  │
+ │ Injects real filenames from your directory  │
+ └─────────────────────────────────────────────┘
+       │ no match found
+       ▼
+ Tier 3 — cheat.sh (web fallback, no key)
+ ┌─────────────────────────────────────────────┐
+ │ Hits cht.sh API                             │
+ │ Broad coverage, works without any account   │
  └─────────────────────────────────────────────┘
        │
        ▼
@@ -178,7 +204,7 @@ woman "your query"
  subprocess → your shell → output
 ```
 
-No LLM configured? It falls back to a local tldr cache, then cheat.sh. Adding a new provider is about 10 lines of Python in the `PROVIDERS` dict.
+Adding a new LLM provider is about 10 lines of Python in the `PROVIDERS` dict.
 
 ---
 
