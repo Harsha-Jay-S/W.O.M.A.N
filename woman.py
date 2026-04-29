@@ -26,7 +26,7 @@ import shlex
 import argparse
 from pathlib import Path
 
-__version__ = "2.0"
+__version__ = "2.1"
 
 # ─── Configuration & Timeouts ─────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ def call_openai(query: str, context: str, model: str = "gpt-4o") -> str:
     return response.choices[0].message.content.strip()
 
 
-def call_anthropic(query: str, context: str, model: str = "claude-sonnet-4-20250514") -> str:
+def call_anthropic(query: str, context: str, model: str = "claude-sonnet-4-6") -> str:
     """Queries the Anthropic Claude API to generate a command based on the context."""
     try:
         import anthropic
@@ -433,7 +433,19 @@ def main():
             print("\nAborted.", file=sys.stderr)
             sys.exit(1)
         except Exception as e:
-            print(f"{DIM}LLM failed ({e}). Falling back...{RESET}".ljust(60), file=sys.stderr, end="\r")
+            # Show a short readable reason — avoid dumping raw JSON/request_id
+            raw = str(e)
+            if "401" in raw or "authentication" in raw.lower() or "api_key" in raw.lower():
+                reason = "invalid or missing API key"
+            elif "429" in raw or "rate" in raw.lower():
+                reason = "rate limit hit"
+            elif "timeout" in raw.lower() or "timed out" in raw.lower():
+                reason = "request timed out"
+            elif "connect" in raw.lower() or "network" in raw.lower():
+                reason = "connection error"
+            else:
+                reason = type(e).__name__
+            print(f"{DIM}LLM failed ({reason}). Falling back...{RESET}".ljust(60), file=sys.stderr, end="\r")
 
     # CASCADE TIER 2: Local `tldr` search (Offline, Fast)
     if not command:
