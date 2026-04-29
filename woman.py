@@ -1,28 +1,38 @@
 #!/usr/bin/env python3
 """
 woman — Working Omniscient Manager of Actual Needs
-The intuitive, AI-powered counterpart to the Linux `man` command.
+The AI-powered counterpart to the Linux `man` command.
 
 Usage:
     woman <natural language query>
     woman extract this gzip file
     woman find all python files modified today
-    woman kill the process using port 8080
-
-Setup:
-    pip install openai          # default provider
-    pip install anthropic       # optional: Anthropic backend
-    export OPENAI_API_KEY=...   # or ANTHROPIC_API_KEY / OLLAMA_HOST
-    alias woman='python3 /path/to/woman.py'
 """
+
+from __future__ import annotations  # enables str | None syntax on Python 3.9
 
 import os
 import sys
 import platform
 import subprocess
 import shutil
+import urllib.request
+import urllib.parse
+import urllib.error
+import zipfile
+import io
+import re
+import shlex
+import argparse
 from pathlib import Path
 
+__version__ = "2.0"
+
+# ─── Configuration & Timeouts ─────────────────────────────────────────────────
+
+TIMEOUT_TLDR_DOWNLOAD = 15  # Seconds to wait when downloading the tldr database
+TIMEOUT_CHTSH_REQUEST = 5   # Seconds to wait for cheat.sh to respond
+TIMEOUT_OLLAMA_API = 60     # Seconds to wait for local Ollama inference
 
 # ─── ANSI Colors ──────────────────────────────────────────────────────────────
 
@@ -50,14 +60,15 @@ SYSTEM_PROMPT = (
 
 
 def call_openai(query: str, context: str, model: str = "gpt-4o") -> str:
+    """Queries the OpenAI API to generate a command based on the context."""
     try:
         from openai import OpenAI
     except ImportError:
-        _die("openai package not installed. Run: pip install openai")
+        raise ImportError("openai package not installed. Run: pip install openai")
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        _die("OPENAI_API_KEY environment variable not set.")
+        raise ValueError("OPENAI_API_KEY environment variable not set.")
 
     client = OpenAI(api_key=api_key)
     response = client.chat.completions.create(
@@ -73,14 +84,15 @@ def call_openai(query: str, context: str, model: str = "gpt-4o") -> str:
 
 
 def call_anthropic(query: str, context: str, model: str = "claude-sonnet-4-20250514") -> str:
+    """Queries the Anthropic Claude API to generate a command based on the context."""
     try:
         import anthropic
     except ImportError:
-        _die("anthropic package not installed. Run: pip install anthropic")
+        raise ImportError("anthropic package not installed. Run: pip install anthropic")
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        _die("ANTHROPIC_API_KEY environment variable not set.")
+        raise ValueError("ANTHROPIC_API_KEY environment variable not set.")
 
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
@@ -95,10 +107,11 @@ def call_anthropic(query: str, context: str, model: str = "claude-sonnet-4-20250
 
 
 def call_ollama(query: str, context: str, model: str = "llama3") -> str:
+    """Queries a local Ollama instance to generate a command."""
     try:
         import requests
     except ImportError:
-        _die("requests package not installed. Run: pip install requests")
+        raise ImportError("requests package not installed. Run: pip install requests")
 
     host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
     payload = {
@@ -111,11 +124,11 @@ def call_ollama(query: str, context: str, model: str = "llama3") -> str:
         "options": {"temperature": 0},
     }
     try:
-        resp = requests.post(f"{host}/api/chat", json=payload, timeout=60)
+        resp = requests.post(f"{host}/api/chat", json=payload, timeout=TIMEOUT_OLLAMA_API)
         resp.raise_for_status()
         return resp.json()["message"]["content"].strip()
-    except Exception as e:
-        _die(f"Ollama request failed: {e}")
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(f"Ollama request failed: {e}")
 
 
 PROVIDERS = {
@@ -125,16 +138,153 @@ PROVIDERS = {
 }
 
 
+# ─── Non-LLM Fallback Backends ────────────────────────────────────────────────
+
+def inject_context(command: str, context: str, query: str) -> str:
+    """
+    Takes a generic tldr/cht.sh command and injects actual filenames from the directory.
+    Uses basic heuristics to pick the right file based on the query or command type.
+    """
+    files = []
+    lines = context.splitlines()
+    in_files = False
+    
+    for line in lines:
+        if line.startswith("Files in current directory:"):
+            in_files = True
+            continue
+        if in_files and line.strip() == "": continue
+        if in_files and "Recent shell history" in line: break
+        if in_files:
+            for f in line.split():
+                if f not in (".", ".."):
+                    files.append(f)
+                    
+    if files:
+        selected_file = files[0]  # Default to first file
+        
+        # Heuristic 1: Did the user mention a specific file in their query?
+        for f in files:
+            if f in query:
+                selected_file = f
+                break
+        else:
+            # Heuristic 2: Match file extensions based on the command
+            if any(cmd in command for cmd in ["tar", "unzip", "gzip", "gunzip"]):
+                archives = [f for f in files if f.endswith(('.tar', '.gz', '.zip', '.tgz', '.bz2'))]
+                if archives: selected_file = archives[0]
+            elif "python" in command:
+                pys = [f for f in files if f.endswith('.py')]
+                if pys: selected_file = pys[0]
+
+        # Safely escape the filename to prevent spaces/symbols from breaking the shell
+        safe_file = shlex.quote(selected_file)
+        command = re.sub(
+            r'<(?:file|filename|path|archive|directory|source|target)[^>]*>', 
+            safe_file, 
+            command, 
+            flags=re.IGNORECASE
+        )
+    return command
+
+
+def call_tldr(query: str, context: str = "") -> str:
+    """
+    Queries a local, offline cache of tldr pages.
+    Downloads the database on the first run if it doesn't exist.
+    """
+    cache_dir = Path.home() / ".cache" / "woman" / "tldr"
+    if not cache_dir.exists():
+        try:
+            print(f"{DIM}Downloading local tldr database for the first time...{RESET}".ljust(60), file=sys.stderr, end="\r")
+            url = "https://tldr.sh/assets/tldr.zip"
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=TIMEOUT_TLDR_DOWNLOAD) as response:
+                with zipfile.ZipFile(io.BytesIO(response.read())) as z:
+                    z.extractall(cache_dir)
+        except (urllib.error.URLError, zipfile.BadZipFile):
+            return ""
+            
+    pages_dir = cache_dir / "pages"
+    if not pages_dir.exists(): 
+        return ""
+    
+    os_name = platform.system().lower()
+    targets = ["common"]
+    if os_name == "linux": targets.append("linux")
+    elif os_name == "darwin": targets.append("osx")
+    elif os_name == "windows": targets.append("windows")
+    
+    best_match_cmd = ""
+    best_score = 0
+    query_words = set(re.findall(r'\w+', query.lower()))
+    if not query_words: return ""
+    
+    for t in targets:
+        target_dir = pages_dir / t
+        if not target_dir.exists(): continue
+        for page in target_dir.glob("*.md"):
+            try:
+                with open(page, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                lines = content.splitlines()
+
+                # FIX: tokenize the page title so hyphenated names like "git-log"
+                # correctly match query words {"git", "log"} instead of checking
+                # if the full string "git-log" is literally in the query word set.
+                title_words = set(re.findall(r'\w+', page.stem.lower()))
+                title_score = 3 if title_words & query_words else 0
+                
+                for i, line in enumerate(lines):
+                    if line.startswith(">"):
+                        desc = line[1:].strip().lower()
+                        desc_words = set(re.findall(r'\w+', desc))
+                        score = title_score + len(query_words.intersection(desc_words))
+                        
+                        # Match threshold
+                        if score > best_score and score >= max(1, len(query_words)//2):
+                            for j in range(i+1, len(lines)):
+                                if lines[j].startswith("`"):
+                                    best_score = score
+                                    best_match_cmd = lines[j].strip("` ")
+                                    break
+            except OSError:
+                continue
+                
+    if best_match_cmd:
+        return inject_context(best_match_cmd, context, query)
+        
+    return ""
+
+
+def call_chtsh(query: str, context: str = "") -> str:
+    """Queries cheat.sh as a no-key web fallback."""
+    slug = urllib.parse.quote_plus(query)
+    url = f"https://cht.sh/{slug}?QT"
+    req = urllib.request.Request(url, headers={"User-Agent": "curl/7.68.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT_CHTSH_REQUEST) as response:
+            text = response.read().decode('utf-8')
+            lines = text.splitlines()
+            # Filter out comments to return just the raw command
+            commands = [line for line in lines if line.strip() and not line.strip().startswith('#')]
+            if commands:
+                return inject_context(commands[0].strip(), context, query)
+    except urllib.error.URLError:
+        pass
+    return ""
+
+
 # ─── Context Gathering ────────────────────────────────────────────────────────
 
 def gather_context() -> str:
+    """Gathers OS details, directory contents, and shell history to feed the AI."""
     lines = []
 
-    # OS / distro
     uname = platform.uname()
     os_info = f"{uname.system} {uname.release}"
     if uname.system == "Linux":
-        # Try to get distro name from /etc/os-release
         try:
             with open("/etc/os-release") as f:
                 for line in f:
@@ -145,25 +295,20 @@ def gather_context() -> str:
             pass
     lines.append(f"OS: {os_info} ({uname.machine})")
 
-    # Current working directory
     cwd = Path.cwd()
     lines.append(f"Current directory: {cwd}")
 
-    # Directory listing
     try:
-        result = subprocess.run(
-            ["ls", "-a"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["ls", "-a"], capture_output=True, text=True, timeout=5)
         files = result.stdout.strip()
         lines.append(f"Files in current directory:\n{files}")
-    except Exception:
+    except (subprocess.SubprocessError, OSError):
         try:
             entries = [p.name for p in cwd.iterdir()]
             lines.append(f"Files in current directory:\n" + "\n".join(entries))
-        except Exception:
+        except OSError:
             lines.append("Files in current directory: (unavailable)")
 
-    # Recent shell history (last 5 commands)
     history_lines = _get_shell_history(5)
     if history_lines:
         lines.append("Recent shell history (most recent last):\n" + "\n".join(history_lines))
@@ -174,14 +319,11 @@ def gather_context() -> str:
 
 
 def _get_shell_history(n: int) -> list[str]:
-    """Try to read the last n commands from bash or zsh history."""
-    # Prefer the file pointed to by $HISTFILE, then fall back to defaults
+    """Attempts to read the last 'n' lines from the user's bash or zsh history."""
     candidates = []
-
     histfile = os.environ.get("HISTFILE")
     if histfile:
         candidates.append(Path(histfile).expanduser())
-
     candidates += [
         Path.home() / ".bash_history",
         Path.home() / ".zsh_history",
@@ -192,21 +334,17 @@ def _get_shell_history(n: int) -> list[str]:
         if path.exists():
             try:
                 raw = path.read_bytes()
-                # zsh extended history lines start with ": <timestamp>:<elapsed>;"
                 text = raw.decode("utf-8", errors="replace")
                 commands = []
                 for line in text.splitlines():
                     line = line.strip()
-                    if not line:
-                        continue
-                    # Strip zsh extended history prefix
+                    if not line: continue
                     if line.startswith(": ") and ";" in line:
                         line = line.split(";", 1)[1]
                     commands.append(line)
                 return commands[-n:] if len(commands) >= n else commands
-            except Exception:
+            except OSError:
                 continue
-
     return []
 
 
@@ -216,27 +354,21 @@ def _die(msg: str) -> None:
     print(f"{RED}Error: {msg}{RESET}", file=sys.stderr)
     sys.exit(1)
 
-
 def _print_banner():
-    print(
-        f"{DIM}woman — Working Omniscient Manager of Actual Needs{RESET}",
-        file=sys.stderr,
-    )
+    print(f"{DIM}woman — Working Omniscient Manager of Actual Needs{RESET}", file=sys.stderr)
 
-
-def _resolve_provider() -> tuple[str, str | None]:
+def _resolve_provider(cli_provider: str | None = None, cli_model: str | None = None) -> tuple[str | None, str | None]:
     """
-    Determine which LLM backend to use.
-    Priority: WOMAN_PROVIDER env var → auto-detect from available API keys.
-    Returns (provider_name, optional_model_override).
+    Determines which LLM backend to use based on configuration.
+    Priority: CLI Flags -> Env Vars -> Auto-detect keys.
+    Returns (None, None) if the user has no keys, letting the script fallback to tldr/cht.sh.
     """
-    provider = os.environ.get("WOMAN_PROVIDER", "").lower()
-    model    = os.environ.get("WOMAN_MODEL", None)
+    provider = (cli_provider or os.environ.get("WOMAN_PROVIDER", "")).lower()
+    model    = cli_model or os.environ.get("WOMAN_MODEL", None)
 
     if provider and provider in PROVIDERS:
         return provider, model
 
-    # Auto-detect
     if os.environ.get("OPENAI_API_KEY"):
         return "openai", model
     if os.environ.get("ANTHROPIC_API_KEY"):
@@ -244,93 +376,102 @@ def _resolve_provider() -> tuple[str, str | None]:
     if os.environ.get("OLLAMA_HOST") or shutil.which("ollama"):
         return "ollama", model
 
-    _die(
-        "No LLM provider configured.\n"
-        "  Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, or OLLAMA_HOST\n"
-        "  Or set WOMAN_PROVIDER=openai|anthropic|ollama explicitly."
-    )
+    # No LLM configured. Returning None triggers the tldr cascade
+    return None, None
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
-        print(
-            f"{BOLD}woman{RESET} — Working Omniscient Manager of Actual Needs\n\n"
-            f"  {CYAN}Usage:{RESET}  woman <natural language query>\n\n"
-            f"  {CYAN}Examples:{RESET}\n"
-            f"    woman extract this gzip file\n"
-            f"    woman find all python files modified today\n"
-            f"    woman kill the process using port 8080\n"
-            f"    woman show disk usage sorted by size\n\n"
-            f"  {CYAN}Config (env vars):{RESET}\n"
-            f"    WOMAN_PROVIDER   openai | anthropic | ollama  (default: auto-detect)\n"
-            f"    WOMAN_MODEL      override the model name\n"
-            f"    OPENAI_API_KEY   required for OpenAI backend\n"
-            f"    ANTHROPIC_API_KEY  required for Anthropic backend\n"
-            f"    OLLAMA_HOST      Ollama server URL (default: http://localhost:11434)\n"
-        )
-        sys.exit(0)
+    parser = argparse.ArgumentParser(
+        prog="woman",
+        description=f"{BOLD}woman{RESET} — Working Omniscient Manager of Actual Needs\n"
+                    f"The AI-powered counterpart to the Linux `man` command.",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=f"{CYAN}Examples:{RESET}\n"
+               f"  woman extract this gzip file\n"
+               f"  woman kill the process using port 8080\n"
+               f"  woman -p ollama summarize system logs"
+    )
+    
+    parser.add_argument("query", nargs="*", help="What you want to do in natural language")
+    parser.add_argument("-p", "--provider", choices=["openai", "anthropic", "ollama"], help="Force a specific LLM provider")
+    parser.add_argument("-m", "--model", help="Force a specific LLM model (e.g., gpt-4o, llama3)")
+    parser.add_argument("-v", "--version", action="version", version=f"%(prog)s v{__version__}")
 
-    query = " ".join(sys.argv[1:])
+    args = parser.parse_args()
+    
+    if not args.query:
+        parser.print_help()
+        sys.exit(0)
+        
+    query = " ".join(args.query)
 
     _print_banner()
     print(f"{DIM}Gathering context...{RESET}", file=sys.stderr, end="\r")
 
     context = gather_context()
-    provider_name, model_override = _resolve_provider()
-    caller = PROVIDERS[provider_name]
+    provider_name, model_override = _resolve_provider(args.provider, args.model)
+    
+    command = ""
 
-    print(f"{DIM}Asking {provider_name}...        {RESET}", file=sys.stderr, end="\r")
+    # CASCADE TIER 1: The LLM (if configured)
+    if provider_name:
+        print(f"{DIM}Asking {provider_name}...        {RESET}", file=sys.stderr, end="\r")
+        caller = PROVIDERS[provider_name]
+        kwargs: dict = {"query": query, "context": context}
+        if model_override: kwargs["model"] = model_override
+        
+        try:
+            command = caller(**kwargs)
+        except KeyboardInterrupt:
+            print("\nAborted.", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"{DIM}LLM failed ({e}). Falling back...{RESET}".ljust(60), file=sys.stderr, end="\r")
 
-    # Build kwargs — only pass model if explicitly overridden
-    kwargs = {"query": query, "context": context}
-    if model_override:
-        kwargs["model"] = model_override
+    # CASCADE TIER 2: Local `tldr` search (Offline, Fast)
+    if not command:
+        print(f"{DIM}Searching local tldr manuals...{RESET}".ljust(60), file=sys.stderr, end="\r")
+        command = call_tldr(query, context)
 
-    try:
-        command = caller(**kwargs)
-    except KeyboardInterrupt:
-        print("\nAborted.", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        _die(str(e))
+    # CASCADE TIER 3: `cheat.sh` (No-key API, broad knowledge)
+    if not command:
+        print(f"{DIM}Searching cheat.sh internet fallback...{RESET}".ljust(60), file=sys.stderr, end="\r")
+        command = call_chtsh(query, context)
+
+    if not command:
+        print(" " * 60, file=sys.stderr, end="\r")
+        _die("All backends failed to find a matching command. Try rephrasing your query or setting an API key.")
 
     # Clear the status line
     print(" " * 60, file=sys.stderr, end="\r")
 
-    # Sanitize: strip accidental backticks or markdown fences the model might sneak in
+    # Sanitize markdown artifacts safely
     command = command.strip().strip("`")
-    if command.startswith("```"):
+    if command.startswith("```"): 
         command = "\n".join(command.splitlines()[1:])
-    if command.endswith("```"):
+    if command.endswith("```"): 
         command = "\n".join(command.splitlines()[:-1])
     command = command.strip()
 
-    # Print the suggested command
+    # Print
     print(f"\n  {CYAN}{BOLD}{command}{RESET}\n")
 
-    # Prompt for execution
+    # Prompt
     try:
         answer = input(f"{YELLOW}Execute this command? (y/n): {RESET}").strip().lower()
     except (KeyboardInterrupt, EOFError):
         print(f"\n{DIM}Aborted.{RESET}")
         sys.exit(0)
 
-    if answer == "y":
+    if answer in ("y", "yes"):
         print()
         try:
-            # Use the user's shell so aliases, PATH, etc. all work correctly
             shell = os.environ.get("SHELL", "/bin/sh")
-            result = subprocess.run(
-                [shell, "-c", command],
-                text=True,
-            )
+            result = subprocess.run([shell, "-c", command], text=True)
             if result.returncode != 0:
-                print(
-                    f"\n{RED}Command exited with code {result.returncode}.{RESET}",
-                    file=sys.stderr,
-                )
+                print(f"\n{RED}Command exited with code {result.returncode}.{RESET}", file=sys.stderr)
                 sys.exit(result.returncode)
         except KeyboardInterrupt:
             print(f"\n{DIM}Interrupted.{RESET}")

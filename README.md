@@ -19,7 +19,7 @@ Then I thought: there's a `man` command. There's no `woman` command. Not for any
 
 So I built one over a weekend, mostly for fun, partly out of spite for a naming gap that's sat in Unix since forever.
 
-`woman` skips the manual page entirely. She looks at your current directory, your shell history, and your OS, then hands you the exact command you need. You decide whether to run it.
+`woman` skips the manual page entirely. She looks at your current directory, your shell history, and your OS, then prints the exact command you need. You decide whether to run it.
 
 ---
 
@@ -178,7 +178,7 @@ woman "your query"
  subprocess → your shell → output
 ```
 
-Adding a new provider is about 10 lines of Python in the `PROVIDERS` dict.
+No LLM configured? It falls back to a local tldr cache, then cheat.sh. Adding a new provider is about 10 lines of Python in the `PROVIDERS` dict.
 
 ---
 
