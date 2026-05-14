@@ -1,0 +1,28 @@
+"""File extension hints used to bias command ranking."""
+
+EXTENSION_HINTS: dict[str, list[str]] = {
+    ".gz": ["extract", "tar", "gzip", "compress"],
+    ".tgz": ["extract", "tar", "gzip", "compress"],
+    ".bz2": ["extract", "tar", "compress"],
+    ".xz": ["extract", "tar", "compress"],
+    ".zip": ["extract", "compress", "unzip", "archive"],
+    ".tar": ["extract", "compress", "archive"],
+    ".json": ["jq", "search", "format", "parse"],
+    ".yaml": ["parse", "search", "edit"],
+    ".yml": ["parse", "search", "edit"],
+    ".toml": ["parse", "edit", "config"],
+    ".csv": ["awk", "cut", "sort", "filter"],
+    ".tsv": ["awk", "cut", "sort", "filter"],
+    ".log": ["tail", "grep", "monitor", "search"],
+    ".txt": ["cat", "grep", "search", "view"],
+    ".md": ["view", "search", "cat"],
+    ".py": ["python", "run", "lint", "format"],
+    ".js": ["node", "npm", "run", "format"],
+    ".ts": ["node", "npm", "run", "format"],
+    ".sh": ["bash", "run", "execute"],
+    ".env": ["config", "edit", "search"],
+    ".png": ["open", "screencapture", "convert"],
+    ".jpg": ["open", "convert", "image"],
+    ".jpeg": ["open", "convert", "image"],
+    ".pdf": ["open", "view", "search"],
+}

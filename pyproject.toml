@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "woman-revamp"
+version = "0.1.0"
+description = "Local command registry and scoring engine"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+ui = ["rich>=13.0.0", "questionary>=2.0.0"]
+test = ["pytest>=8.0.0", "pytest-cov>=5.0.0", "pytest-mock>=3.14.0"]
+
+[project.scripts]
+woman = "woman_revamp.cli:main"
+woman-revamp = "woman_revamp.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["woman_revamp*"]
