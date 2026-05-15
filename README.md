@@ -13,41 +13,36 @@ $ woman kill whatever is hogging port 3000
 
 ## Why this exists
 
-It was late. I forgot a `nmap` flag. Again. I typed `man nmap`, got my answer, and moved on.
+It was late. I forgot an `nmap` flag. Again. I typed `man nmap`, got my answer, moved on.
 
-Then I thought: there's a `man` command. There's no `woman` command. Not for any real reason. Nobody just... did it.
+There's a `man` command. There's no `woman` command. Not for any real reason — nobody just... did it.
 
-So I built one over a weekend, mostly for fun, partly out of spite for a naming gap that's sat in Unix since forever.
+So I built one over a weekend. Mostly for fun. Partly out of spite.
 
-`woman` skips the manual page entirely. She looks at your current directory, your shell history, and your OS, then prints the exact command you need in a sleek purple UI. You decide whether to run it.
+`woman` skips the manual page entirely. She looks at your current directory, your shell history, and your OS, then prints the exact command you need. You decide whether to run it.
 
 ---
 
-## What it does (The Revamp)
+## What it does
 
-You type what you want in plain English. `woman` gathers context first — your OS, the files in your current directory, and your last 5 shell commands — and builds a command tailored to your exact setup using a completely revamped engine.
+You type what you want in plain English. `woman` grabs context first — your OS, the files in your current directory, your last 5 shell commands — and builds a command for your exact setup.
 
-### Core Features:
-- **Zero-Dependency Core:** The engine uses native Python `urllib` to talk to LLMs. No heavy SDKs, ensuring millisecond boot times.
-- **Auto-Healing UI:** Uses `rich` and `questionary` for a premium purple-gradient terminal experience. If they aren't installed, `woman` will automatically prompt to bootstrap and install them for you.
-- **Dynamic `$PATH` Scanner:** Automatically detects the tools installed on your machine.
-- **Just-In-Time (JIT) Man-Page Parsing:** If a tool's syntax isn't known, it extracts the first 300 lines of its `man` page on the fly and intelligently parses it using either heuristics or AI.
-- **Local Fallback Engine:** Works entirely offline using exact-match heuristics if no AI provider is configured or available.
-
-You don't *need* an API key to use the offline heuristic engine or a local Ollama instance, but configuring an LLM gives the most context-aware answers.
+- **No SDK dependencies.** Uses native Python `urllib` to talk to LLMs. Boots fast.
+- **Self-installing UI.** Uses `rich` and `questionary` for a purple terminal interface. If they're missing, it asks to install them.
+- **Reads your `$PATH`.** It knows what tools you actually have.
+- **Parses man pages on the fly.** If a tool isn't indexed, it pulls the first 300 lines of the man page and works from there — heuristics or AI, depending on your config.
+- **Works offline.** No LLM provider set up? It falls back to local heuristic matching.
 
 ---
 
 ## Installation
 
-### 1. Install via `uv` (Recommended) or `pip`
-
-Clone the repo and install the UI dependencies automatically:
+### 1. Install via `uv` or `pip`
 
 ```bash
 uv pip install -e .[ui]
 # OR: python3 -m pip install -e .[ui]
-# OR simply run: bash install.sh
+# OR: bash install.sh
 ```
 
 ### 2. Add the alias
@@ -56,40 +51,39 @@ uv pip install -e .[ui]
 alias woman='python3 -m woman_revamp'
 ```
 
-### 3. Run the Setup Wizard
-
-The first time you run `woman`, it launches an interactive wizard.
+### 3. Run setup
 
 ```bash
 woman config
 ```
-You can choose:
-* **UI Mode:** Rich (purple gradients) or Basic.
-* **AI Provider:** Ollama (Local), OpenAI, Anthropic, Gemini, or None (Heuristics only).
-* **Indexing Mode:** JIT (Just-in-Time, recommended) or Batch.
 
-Settings are saved in `~/.config/woman/config.json`.
+You'll pick:
+* **UI mode:** Rich (purple gradients) or Basic.
+* **AI provider:** Ollama, OpenAI, Anthropic, Gemini, or None.
+* **Indexing mode:** JIT (recommended) or Batch.
+
+Settings go in `~/.config/woman/config.json`.
 
 ---
 
-## Configuration & Usage
+## Usage
 
-`woman` automatically tracks your `$PATH`. If you install a new package manager or tool, she will prompt you to refresh her local cache.
+`woman` watches your `$PATH`. Install something new and she'll ask if you want to refresh.
 
 ```bash
-woman --list                                  # List all indexed tools
-woman --refresh-index                         # Force refresh the PATH cache
-woman --index-tool docker                     # Manually index a specific tool
-woman "undo my last git commit"               # Normal usage
-woman --json "what is using port 8080"        # Output raw scoring JSON
+woman --list                            # List all indexed tools
+woman --refresh-index                   # Force refresh the PATH cache
+woman --index-tool docker               # Manually index a specific tool
+woman "undo my last git commit"         # Normal usage
+woman --json "what is using port 8080"  # Output raw scoring JSON
 ```
 
-### Supported AI Providers
-- **`ollama`**: Local models (default endpoint `http://localhost:11434`). Fast, private, no keys.
-- **`openai`**: GPT-4o, etc.
-- **`anthropic`**: Claude 3.5, etc.
-- **`gemini`**: Google Gemini API.
-- **`none`**: Pure offline local heuristics matching.
+### Supported AI providers
+- **`ollama`** — local models at `http://localhost:11434`. No API key, runs on your machine.
+- **`openai`** — GPT-4o, etc.
+- **`anthropic`** — Claude.
+- **`gemini`** — Google Gemini.
+- **`none`** — offline heuristics only.
 
 ---
 
@@ -119,12 +113,12 @@ woman "your query"
  ┌─────────────────────────────────────────────┐
  │ If tool is un-indexed, reads first 300      │
  │ lines of `man` or `--help`.                 │
- │ Passes context + man snippet to LLM via     │
- │ zero-dependency urllib HTTP client.         │
+ │ Passes context + man snippet to LLM         │
+ │ via urllib HTTP client.                     │
  └─────────────────────────────────────────────┘
        │
        ▼
- Print command in Rich Purple UI
+ Print command in purple UI
        │
        ▼
  "Execute this command? (y/n)"
@@ -139,24 +133,20 @@ woman "your query"
 
 ## Disclaimer
 
-This tool was written entirely by an LLM. The person who prompted it into existence takes no responsibility for what it suggests or runs.
+Written entirely by an LLM. I (the human who prompted it into existence) take no responsibility for what it suggests or runs.
 
-If you `y` a command and something breaks, that's between you and your terminal. Read what it prints before you confirm it. The prompt is there for a reason.
-
-By using `woman`, you're agreeing that you can read a one-line shell command and make a basic judgment call about it.
+If you `y` a command and something breaks, that's on you. The confirmation prompt is there so you actually read the command first. Use it.
 
 ---
 
 ## License
 
-MIT. Free to use, fork, rename, or ignore.
+MIT. Use it, fork it, rename it, ignore it.
 
 ---
 
 <div align="center">
 
 *Built because `man` existed and `woman` didn't.*
-
-`$ woman help me`
 
 </div>
