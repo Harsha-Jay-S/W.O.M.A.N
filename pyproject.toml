@@ -22,4 +22,5 @@ woman-revamp = "woman_revamp.cli:main"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["woman_revamp*"]
+where = ["."]
+include = ["*"]

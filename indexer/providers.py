@@ -16,10 +16,10 @@ class AIProviderSpec:
     model: str = ""
 
 
-def _json_request(url: str, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict[str, Any] | None:
+def _json_request(url: str, payload: dict[str, Any], headers: dict[str, str] | None = None, timeout: int = 15) -> dict[str, Any] | None:
     req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers or {"Content-Type": "application/json"})
     try:
-        with request.urlopen(req, timeout=15) as resp:
+        with request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
     except (error.URLError, TimeoutError, OSError, ValueError):
         return None
@@ -78,7 +78,8 @@ def fetch_provider_text(spec: AIProviderSpec, prompt: str) -> str:
     if not payload:
         return ""
     url, body, headers = payload
-    parsed = _json_request(url, body, headers)
+    timeout = 180 if spec.provider.lower() == "ollama" else 15
+    parsed = _json_request(url, body, headers, timeout=timeout)
     if not parsed:
         return ""
     provider = spec.provider.lower()

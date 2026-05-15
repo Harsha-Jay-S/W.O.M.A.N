@@ -7,6 +7,7 @@ from difflib import SequenceMatcher, get_close_matches
 import os
 import re
 import shutil
+import shlex
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
@@ -268,6 +269,10 @@ def _match_context_path(context: object, *, extensions: Sequence[str] = (), name
     candidates = _candidate_paths(context)
     if not candidates:
         return ""
+    context_text = _flatten(context).lower()
+    for candidate in candidates:
+        if candidate.lower() in context_text:
+            return candidate
     for ext in extensions:
         for candidate in candidates:
             if candidate.lower().endswith(ext.lower()):
@@ -490,6 +495,8 @@ def fill_template(template: str, slots: Mapping[str, str]) -> str | None:
         value = slots.get(key)
         if value in (None, ""):
             return match.group(0)
+        if key in {"file", "path", "target", "source", "destination", "dir", "archive"}:
+            return shlex.quote(str(value))
         return str(value)
 
     rendered = PLACEHOLDER_RE.sub(replace, template)

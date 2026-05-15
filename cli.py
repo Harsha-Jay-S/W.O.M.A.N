@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Sequence
 
 from .config import CONFIG_FILE, WomanConfig, ensure_directories
+from .context import get_shell_history
 from .engine import call_local_registry, rank_candidates
 from .indexer.cache import registry_needs_refresh, refresh_registry_cache
 from .indexer.controller import index_one
@@ -140,6 +141,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         cwd = Path.cwd()
         entries = sorted(p.name for p in cwd.iterdir())
         context = "\n".join([f"Current directory: {cwd}", "Files:"] + entries[:200])
+    history = get_shell_history(5)
+    if history:
+        context = "\n\n".join([context, "Recent shell history:\n" + "\n".join(history)])
 
     if args.json:
         payload = rank_candidates(query, context=context, os_info=os_name, limit=args.top)

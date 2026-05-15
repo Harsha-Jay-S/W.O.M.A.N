@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable
 
-import questionary
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -43,11 +42,15 @@ def show_progress(message: str) -> None:
 
 
 def prompt_text(message: str, default: str = "") -> str:
+    import questionary
+
     answer = questionary.text(message, default=default).ask()
     return default if answer is None else answer
 
 
 def prompt_choice(message: str, choices: list[Choice], default: str = "") -> str:
+    import questionary
+
     prompt_choices = [questionary.Choice(title=f"{choice.label}{f' - {choice.description}' if choice.description else ''}", value=choice.key) for choice in choices]
     answer = questionary.select(message, choices=prompt_choices, default=default or choices[0].key).ask()
     return choices[0].key if answer is None else str(answer)
