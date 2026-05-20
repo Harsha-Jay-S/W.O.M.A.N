@@ -24,6 +24,8 @@ def get_shell_history(n: int = 5) -> list[str]:
     for path in candidates:
         if not path.exists():
             continue
+        if "fish" in path.name:
+            continue
         try:
             raw = path.read_bytes()
             text = raw.decode("utf-8", errors="replace")
@@ -37,10 +39,6 @@ def get_shell_history(n: int = 5) -> list[str]:
                 continue
             if line.startswith(": ") and ";" in line:
                 line = line.split(";", 1)[1]
-            if line.startswith("- cmd:"):
-                line = line[len("- cmd:"):].strip()
-            elif line.startswith("  when:"):
-                continue
             commands.append(line)
         return commands[-n:] if len(commands) >= n else commands
     return []

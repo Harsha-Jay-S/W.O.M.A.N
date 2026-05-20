@@ -16,10 +16,10 @@ def test_fill_template_renders_when_complete():
 def test_directory_query_prefers_directory_find():
     rendered = call_local_registry(
         "find all directories in this folder",
-        context="Current directory: /home/jayharsha\nFiles:",
+        context="Current directory: /home/user\nFiles:",
         os_info="linux",
     )
-    assert rendered == "find /home/jayharsha -type d"
+    assert rendered == "find /home/user -type d"
 
 
 def test_config_defaults_to_300_lines():

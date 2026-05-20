@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import Iterable
-
-from rich.console import Console
-from rich.panel import Panel
-from rich.syntax import Syntax
-from rich.text import Text
 
 
 PURPLE_STOPS = ["#7c3aed", "#8b5cf6", "#a855f7", "#c084fc", "#e879f9"]
@@ -22,14 +18,29 @@ class Choice:
 
 
 def has_rich() -> bool:
-    return True
+    if not sys.stdout.isatty():
+        return False
+    try:
+        from rich.console import Console  # noqa: F401
+        return True
+    except ImportError:
+        return False
 
 
 def gradient_text(lines: Iterable[str]) -> str:
     return "\n".join(lines)
 
 
+def _console():
+    from rich.console import Console
+    return Console()
+
+
 def show_banner() -> None:
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+
     console = Console()
     text = Text()
     text.append("woman", style="bold #c084fc")
@@ -38,7 +49,7 @@ def show_banner() -> None:
 
 
 def show_progress(message: str) -> None:
-    Console().print(f"[bold #c084fc]{message}[/bold #c084fc]")
+    _console().print(f"[bold #c084fc]{message}[/bold #c084fc]")
 
 
 def prompt_text(message: str, default: str = "") -> str:
@@ -56,5 +67,6 @@ def prompt_choice(message: str, choices: list[Choice], default: str = "") -> str
     return choices[0].key if answer is None else str(answer)
 
 
-def syntax_block(command: str) -> Syntax:
+def syntax_block(command: str) -> object:
+    from rich.syntax import Syntax
     return Syntax(command, "bash", theme="monokai", word_wrap=True)

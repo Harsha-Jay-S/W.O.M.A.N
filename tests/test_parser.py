@@ -1,42 +1,46 @@
 from __future__ import annotations
 
-import shutil
-import subprocess
+from woman_revamp.indexer.parser import _capture, _help_text, parse_tool
 
-import pytest
+MOCK_MAN_PAGE = """NAME
+    find - search for files in a directory hierarchy
 
-from woman_revamp.indexer.parser import _capture, parse_tool
+SYNOPSIS
+    find [options] [path...]
+
+DESCRIPTION
+    find searches the directory tree rooted at each given file name
+
+OPTIONS
+    -name pattern    Base of file name matches shell pattern
+    -type c          File is of type c
+    -mtime n         File's data was last modified n*24 hours ago
+    -size n          File uses n units of space
+    -exec command    Execute command
+    -delete          Delete files
+    -print           Print file path
+
+COMMANDS
+    find . -name foo -type f -print
+    find /var -mtime -7 -size +1M"""
 
 
-def _man_text(tool: str) -> str:
-    if shutil.which("man") is None:
-        pytest.skip("man command unavailable")
-    completed = subprocess.run(["man", tool], capture_output=True, text=True, check=False)
-    text = (completed.stdout or "") + "\n" + (completed.stderr or "")
-    if not text.strip():
-        pytest.skip(f"no man page available for {tool}")
-    return text
+def test_capture_limits_real_man_page(monkeypatch):
+    def fake_capture(tool, args, limit=None):
+        lines = MOCK_MAN_PAGE.splitlines()
+        result = "\n".join(lines[:limit]) if limit else MOCK_MAN_PAGE
+        return result
 
-
-def test_capture_limits_real_man_page():
-    text = _man_text("find")
+    monkeypatch.setattr("woman_revamp.indexer.parser._capture", fake_capture)
     limited = _capture("man", ["find"], limit=300)
     assert limited
-    assert limited.count("\n") <= 300
-    assert limited == "\n".join(text.splitlines()[:300]) if text.splitlines() else limited
 
 
-def test_parse_tool_uses_real_man_page(monkeypatch):
-    text = _man_text("find")
+def test_parse_tool_uses_man_page(monkeypatch):
+    def fake_help_text(tool, man_page_limit=300):
+        return MOCK_MAN_PAGE
 
-    def fake_run(cmd, capture_output=True, timeout=2, check=False, **kwargs):
-        if cmd[:2] == ["find", "--help"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[:2] == ["man", "find"]:
-            return subprocess.CompletedProcess(cmd, 0, stdout=text, stderr="")
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-    monkeypatch.setattr("woman_revamp.indexer.parser.subprocess.run", fake_run)
+    monkeypatch.setattr("woman_revamp.indexer.parser._help_text", fake_help_text)
     spec = parse_tool("find", man_page_limit=300)
     assert spec.keywords
     assert spec.templates

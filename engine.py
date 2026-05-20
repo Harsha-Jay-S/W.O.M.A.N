@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher, get_close_matches
+from functools import lru_cache
 import os
 import re
 import shutil
@@ -128,23 +129,39 @@ def _intent_tokens() -> set[str]:
     return values
 
 
-def build_vocabulary(registry: Mapping[str, Mapping]) -> list[str]:
+def _hashable_registry(registry: Mapping[str, Mapping]) -> tuple:
+    """Convert registry to a hashable form for caching."""
+    return tuple(
+        (name, tuple(spec.get("keywords", [])), tuple(spec.get("templates", {}).items()), tuple(spec.get("intent_map", {}).items()))
+        for name, spec in sorted(registry.items())
+    )
+
+
+@lru_cache(maxsize=1)
+def _cached_vocabulary(registry_hash: tuple) -> list[str]:
     vocabulary: set[str] = set()
     vocabulary.update(_intent_tokens())
     for canonical, phrases in SYNONYMS.items():
         vocabulary.add(canonical)
         for phrase in phrases:
             vocabulary.update(tokenize(phrase))
-    for spec in registry.values():
-        vocabulary.update(tokenize(" ".join(spec.get("keywords", []))))
-        vocabulary.update(tokenize(" ".join(spec.get("templates", {}).keys())))
-        vocabulary.update(tokenize(" ".join(spec.get("intent_map", {}).keys())))
+    for _name, keywords, templates, intent_map in registry_hash:
+        kw_text = " ".join(keywords)
+        tmpl_text = " ".join(k for k, _v in templates)
+        intent_text = " ".join(k for k, _v in intent_map)
+        vocabulary.update(tokenize(kw_text))
+        vocabulary.update(tokenize(tmpl_text))
+        vocabulary.update(tokenize(intent_text))
     for ext, hints in EXTENSION_HINTS.items():
         vocabulary.add(ext.lstrip("."))
         vocabulary.update(hints)
     for key in NUMBER_PATTERNS:
         vocabulary.add(key)
     return sorted(vocabulary)
+
+
+def build_vocabulary(registry: Mapping[str, Mapping]) -> list[str]:
+    return _cached_vocabulary(_hashable_registry(registry))
 
 
 def correct_typos(tokens: list[str], vocabulary: Sequence[str]) -> list[str]:

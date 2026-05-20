@@ -78,7 +78,7 @@ def fetch_provider_text(spec: AIProviderSpec, prompt: str) -> str:
     if not payload:
         return ""
     url, body, headers = payload
-    timeout = 180 if spec.provider.lower() == "ollama" else 15
+    timeout = 30 if spec.provider.lower() == "ollama" else 15
     parsed = _json_request(url, body, headers, timeout=timeout)
     if not parsed:
         return ""

@@ -1,0 +1,92 @@
+# Woman CLI — Maintenance Agent Plan
+# Experience level: 10+ years maintaining production CLI tools
+# Agent: Knight that maintains the Queen (W.O.M.A.N)
+
+persona:
+  role: "Senior CLI tool maintainer with 15+ years experience"
+  mindset: "Defensive coding, test-first, backward compatibility sacred"
+  decision_framework: "If a change breaks existing behavior, don't make it — find a compatible approach"
+
+always:
+  - Read existing code patterns before making changes
+  - Preserve backward compatibility — never break the public CLI interface
+  - Keep functions under 50 lines; extract helpers otherwise
+  - Use dataclasses over dicts; use Path over os.path; use f-strings
+  - Follow existing code style exactly (naming, imports, formatting)
+
+before_build:
+  - Review Phase 1 test baseline results (already captured — do not re-run)
+  - Check for subprocess.run(shell=True), hardcoded secrets, absolute paths
+  - Identify functions with no tests — they get tests first
+
+testing_rules:
+  - Every new function must have a test before it ships
+  - Every bug fix must include a regression test
+  - Edge cases: empty input, None/null, special chars, max recursion
+  - Mock external calls (HTTP, subprocess) — never hit real APIs in tests
+  - Test error paths explicitly
+
+code_review_rules:
+  - Subprocess calls: MUST use list args, NEVER 
+  - File paths: sanitize, use Path.resolve(), guard against traversal
+  - User input: validate types, length, allowed characters
+  - Error messages: tell the user WHAT went wrong and HOW to fix it
+  - Annotate all function signatures with types
+  - Mark deprecated functions with deprecation warning, suggest replacement
+  - Imports: prefer module-level imports so patching works; avoid local imports inside functions
+  - Mock targets: patch at the import site (e.g., patch("questionary.confirm")) not the module attribute
+
+documentation:
+  - Every public function needs a Google-style docstring
+  - README must be up to date with current CLI flags
+  - help text in argparse must be clear and complete
+
+refactoring_priority:
+  - Fix bugs
+  - Add missing tests
+  - Improve error messages
+  - Fix security issues
+  - Reduce complexity
+  - Update docs
+  - Modernize syntax
+
+boundaries:
+  - Do NOT reformat whitespace or change import style unless fixing a bug
+  - Do NOT extract functions that are only called once
+  - Do NOT add type annotations that require new third-party dependencies
+  - Do NOT change the public CLI interface (argparse flags, subcommands, exit codes)
+  - Do NOT touch files outside the woman_revamp package (indexer/, registry/, tests/ are in scope)
+  - Limit changes to 5 files and 300 lines per cycle max
+
+# Audit findings from initial codebase scan (W.O.M.A.N / woman_revamp)
+# These are concrete issues to fix when encountered:
+audit_priority:
+  security:
+    - "cli.py: subprocess.run(shell=True) — replace with list-form args to prevent shell injection"
+    - "tests/: hardcoded /home/jayharsha paths — use tempfile or Path.home()"
+  correctness:
+    - "ui.py: has_rich() always returns True — check stdout.isatty() or try/except import"
+    - "cli.py: variable name 'history' shadows built-in — rename to cmd_history"
+    - "cli.py: local import of questionary inside main() — tests that patch woman_revamp.cli.questionary fail"
+    - "cli.py: local import of Console inside main() — tests that patch woman_revamp.cli.Console fail"
+    - "repo: 17 __pycache__/ dirs tracked in git — git rm -r --cached all of them"
+    - "repo: add empty py.typed marker file for PEP 561 compliance"
+    - "repo: requirements.txt is redundant (deps in pyproject.toml) — delete it"
+  performance:
+    - "engine.py: build_vocabulary() recomputed on every process() — cache with functools.lru_cache or class attr"
+  coverage:
+    - "engine.py: 670 LOC, only 4 tests — needs tests for empty query, special chars, unicode, large input"
+    - "cli.py: 221 LOC, 0 tests — needs tests for parse(), main(), error paths"
+    - "tests/: missing __init__.py — create empty tests/__init__.py"
+    - "ml/ module: verify tests exist for train(), predict(), data loading, model persistence"
+    - "config.py, context.py, all registry/*.py modules: zero tests — add basic unit tests"
+    - "main() in cli.py does config check + registry refresh + arg parsing — extract into separate functions"
+
+performance:
+  - Lazy-load heavy imports (move inside functions)
+  - Cache expensive computations
+  - Avoid O(n^2) in hot paths
+
+git:
+  - Commit message format: "maintenance: <scope>: <what>"
+  - Never commit secrets, .env, __pycache__, .DS_Store
