@@ -19,6 +19,8 @@ from .indexer.providers import AIProviderSpec
 from .registry import get_registry, normalize_os_name
 from .ui import Choice, prompt_choice, show_progress, syntax_block
 from .wizard import run_setup
+from rich.console import Console
+import questionary
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -152,13 +154,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     command = call_local_registry(query, context=context, os_info=os_name)
     if command:
-        from rich.console import Console
-
         Console().print()
         Console().print(syntax_block(command))
         try:
-            import questionary
-
             answer = questionary.confirm("Execute this command?").ask()
         except (KeyboardInterrupt, EOFError):
             print(f"\nAborted.")

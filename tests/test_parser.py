@@ -29,7 +29,7 @@ def test_capture_limits_real_man_page():
 def test_parse_tool_uses_real_man_page(monkeypatch):
     text = _man_text("find")
 
-    def fake_run(cmd, capture_output=True, text=True, timeout=2, check=False):
+    def fake_run(cmd, capture_output=True, timeout=2, check=False, **kwargs):
         if cmd[:2] == ["find", "--help"]:
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         if cmd[:2] == ["man", "find"]:
