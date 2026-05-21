@@ -27,7 +27,7 @@ testing_rules:
   - Test error paths explicitly
 
 code_review_rules:
-  - Subprocess calls: MUST use list args, NEVER 
+  - Subprocess calls: MUST use list args, NEVER shell=True
   - File paths: sanitize, use Path.resolve(), guard against traversal
   - User input: validate types, length, allowed characters
   - Error messages: tell the user WHAT went wrong and HOW to fix it
