@@ -37,76 +37,36 @@ You type what you want in plain English. `woman` grabs context first — your OS
 
 ## Installation
 
-### Prerequisites
-
-- **Python 3.11 or later** — check with `python3 --version`
-- **pip** — comes with Python. If missing: `sudo apt install python3-pip` (Linux) or `brew install python` (macOS)
-- **git** — check with `git --version`
-
----
-
-### Quick Install (recommended)
+You need Python 3.11+. Most systems have it. If not, you'll figure it out.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Harsha-Jay-S/W.O.M.A.N.git
 cd W.O.M.A.N
-
-# 2. Install the package (this creates the `woman` command automatically)
 pip install -e .
-
-# 3. Verify it works
 woman --help
 ```
 
-That's it. After `pip install -e .`, the `woman` command is available globally via the console_scripts entry point defined in `pyproject.toml`. No aliases needed.
+That's it. `pip install -e .` drops the `woman` command on your path automatically. No aliases needed.
 
-**If you get `command not found: woman`**, Python's user bin directory isn't in your `$PATH`:
+Still getting `command not found`? Your `~/.local/bin` probably isn't in `$PATH`:
 
 ```bash
-# Add it to your shell config (bash/zsh)
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-
-# Verify again
-woman --help
 ```
 
----
-
-### First-time Setup
-
-Run the setup wizard to configure your AI provider, UI mode, and indexing:
+Then run the setup wizard:
 
 ```bash
 woman config
 ```
 
-You'll pick:
-| Setting | Options | What it does |
-|---|---|---|
-| **UI mode** | Rich (purple) or Basic | Visual style of the output |
-| **AI provider** | Ollama, OpenAI, Anthropic, Gemini, or None | Which LLM powers command generation |
-| **Indexing mode** | JIT or Batch | When to scan and cache tools |
+It'll ask about your AI provider, UI style, and indexing mode. Settings land in `~/.config/woman/config.json`.
 
-Settings are saved to `~/.config/woman/config.json`.
-
----
-
-### Alternative: Run without installing
-
-If you prefer not to install, use Python's module mode:
+**Don't want to install it?** Fine:
 
 ```bash
-cd W.O.M.A.N
-python3 -m woman_revamp find files
-```
-
-Or add a permanent alias:
-
-```bash
-echo "alias woman='python3 -m woman_revamp'" >> ~/.bashrc
-source ~/.bashrc
+alias woman='python3 -m woman_revamp'
 ```
 
 ---
