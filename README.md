@@ -37,7 +37,13 @@ You type what you want in plain English. `woman` grabs context first — your OS
 
 ## Installation
 
-You need Python 3.11+. Most systems have it. If not, you'll figure it out.
+You need Python 3.11+. Check:
+
+```bash
+python3 --version
+```
+
+If that didn't show something like `Python 3.11.x` or higher, google "install python 3.11" for your OS. You'll be back in 2 minutes.
 
 ```bash
 git clone https://github.com/Harsha-Jay-S/W.O.M.A.N.git
