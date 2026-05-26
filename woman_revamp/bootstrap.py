@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from importlib.util import find_spec
@@ -42,4 +41,5 @@ def ensure_runtime_dependencies() -> None:
         return
     if not prompt_install_missing(missing):
         raise SystemExit(1)
-    os.execv(sys.executable, [sys.executable, *sys.argv])
+    subprocess.run([sys.executable, *sys.argv], check=False)
+    raise SystemExit(0)

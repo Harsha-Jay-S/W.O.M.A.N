@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from difflib import SequenceMatcher, get_close_matches
+import getpass
 import os
 import re
 import shutil
@@ -395,8 +396,8 @@ def _infer_slots(query: str, context: object, signals: Mapping[str, str]) -> dic
         "json": "{}",
         "text": "text",
         "command": "command",
-        "user": os.environ.get("USER", "user"),
-        "group": os.environ.get("USER", "group"),
+        "user": getpass.getuser(),
+        "group": getpass.getuser(),
         "mode": "755",
         "kind": "f",
         "attribute": "com.apple.quarantine",

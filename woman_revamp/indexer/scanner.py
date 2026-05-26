@@ -20,16 +20,28 @@ def _iter_path_dirs() -> list[Path]:
 def discover_path_tools() -> list[str]:
     tools: list[str] = []
     seen: set[str] = set()
+    pathext = {
+        ext.lower()
+        for ext in os.environ.get("PATHEXT", ".EXE;.BAT;.CMD;.COM").split(os.pathsep)
+        if ext
+    }
     for directory in _iter_path_dirs():
         try:
             for entry in directory.iterdir():
-                if entry.name in seen:
-                    continue
                 try:
                     mode = entry.stat().st_mode
                 except OSError:
                     continue
-                if entry.is_file() and mode & stat.S_IXUSR:
+                if not entry.is_file():
+                    continue
+                if os.name == "nt":
+                    if entry.suffix.lower() not in pathext:
+                        continue
+                elif not (mode & stat.S_IXUSR):
+                    continue
+                if entry.name in seen:
+                    continue
+                if entry.name not in seen:
                     seen.add(entry.name)
                     tools.append(entry.name)
         except OSError:
@@ -45,4 +57,3 @@ def snapshot_path_state() -> dict[str, float]:
         except OSError:
             continue
     return snapshot
-
