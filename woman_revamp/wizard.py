@@ -14,7 +14,7 @@ def run_setup() -> WomanConfig:
     ui_mode = prompt_choice(
         "Choose setup UI style:",
         [Choice("rich", "Rich UI", "purple terminal panels if available"), Choice("basic", "Basic UI", "stdlib fallback")],
-        default="1",
+        default="rich",
     )
     ai_provider = prompt_choice(
         "Choose AI fallback mode:",
@@ -25,7 +25,7 @@ def run_setup() -> WomanConfig:
             Choice("anthropic", "Anthropic", "API key"),
             Choice("gemini", "Google Gemini", "API key"),
         ],
-        default="1",
+        default="none",
     )
     backend = ""
     endpoint = ""
@@ -39,18 +39,18 @@ def run_setup() -> WomanConfig:
     auto_update = prompt_choice(
         "Automatically refresh registry when PATH changes?",
         [Choice("yes", "Yes"), Choice("no", "No")],
-        default="1",
+        default="yes",
     ) == "yes"
     index_mode = prompt_choice(
         "Choose indexing mode:",
         [Choice("jit", "Just-in-time", "index tools when needed"), Choice("batch", "Batch", "scan PATH now")],
-        default="1",
+        default="jit",
     )
     man_page_limit = int(
         prompt_choice(
             "Choose man-page extraction depth:",
             [Choice("300", "First 300 lines", "default fast path"), Choice("0", "Entire man page", "for benchmarking")],
-            default="1",
+            default="300",
         )
     )
     config = WomanConfig(

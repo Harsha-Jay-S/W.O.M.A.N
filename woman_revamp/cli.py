@@ -87,7 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     Choice("skip", "Skip this time", "keep current cache"),
                     Choice("disable", "Disable prompts", "stop asking on future PATH changes"),
                 ],
-                default="1",
+                default="refresh",
             )
             if decision == "refresh":
                 provider = AIProviderSpec(
