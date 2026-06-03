@@ -180,6 +180,12 @@ def extract_intent(query: str) -> list[str]:
         if intent not in seen:
             ordered.append(intent)
             seen.add(intent)
+    if not ordered:
+        first_word = q.split()[0] if q.strip() else ""
+        for intent, _ in INTENT_PHRASES:
+            if first_word == intent:
+                ordered.append(intent)
+                break
     return ordered
 
 
@@ -194,10 +200,10 @@ def expand_synonyms(tokens: Iterable[str]) -> list[str]:
     return expanded
 
 
-def hints_from_context(query: str, context: object) -> list[str]:
-    """Bias the score using file extensions and visible context hints."""
+def hints_from_context(context: object) -> list[str]:
+    """Bias the score using file extensions from context only."""
 
-    text = f"{query}\n{_flatten(context)}".lower()
+    text = _flatten(context).lower()
     hints: list[str] = []
     for ext, ext_hints in EXTENSION_HINTS.items():
         ext_name = ext.lstrip(".")
@@ -256,7 +262,7 @@ def _context_paths(context: object) -> list[str]:
             continue
         if cleaned.startswith(("OS:", "Current directory:", "Files in directory:", "Last shell commands:", "Recent shell commands:")):
             continue
-        if cleaned.startswith(("/", "./", "../")) or re.match(r"^[A-Za-z]:\\", cleaned) or "." in cleaned:
+        if cleaned.startswith(("/", "./", "../")) or re.match(r"^[A-Za-z]:\\", cleaned) or re.search(r"\.[a-zA-Z0-9]{1,8}$", cleaned):
             paths.append(cleaned)
     return paths
 
@@ -297,19 +303,19 @@ def _infer_batch_rename(query: str) -> dict[str, str]:
     text = normalize_query(query)
     match = re.search(r"\brename\b.*?\ball\b.*?\b([a-z0-9]+)\b.*?\bfiles?\b.*?\bto\b.*?\b([a-z0-9]+)\b", text)
     if match:
+        from_e = match.group(1)
+        to_e = match.group(2)
         return {
-            "from_ext": match.group(1),
-            "to_ext": match.group(2),
-            "source": f"*.{match.group(1)}",
-            "destination": f"*.{match.group(2)}",
+            "from_ext": from_e,
+            "to_ext": to_e,
         }
     match = re.search(r"\b(?:extension|suffix)\s+([a-z0-9]+)\b.*?\bto\b\s+([a-z0-9]+)\b", text)
     if match:
+        from_e = match.group(1)
+        to_e = match.group(2)
         return {
-            "from_ext": match.group(1),
-            "to_ext": match.group(2),
-            "source": f"*.{match.group(1)}",
-            "destination": f"*.{match.group(2)}",
+            "from_ext": from_e,
+            "to_ext": to_e,
         }
     return {}
 
@@ -321,7 +327,9 @@ def _default_command_slots(query: str, context: object, signals: Mapping[str, st
     slots.update(rename_slots)
 
     if any(word in query_text for word in ("extract", "unpack", "decompress", "untar")):
-        matched = _match_context_path(context, extensions=(".tar.gz", ".tgz", ".gz", ".zip", ".bz2", ".xz"))
+        matched = slots.get("file") or slots.get("path")
+        if not matched or matched in (".", ""):
+            matched = _match_context_path(context, extensions=(".tar.gz", ".tgz", ".gz", ".zip", ".bz2", ".xz"))
         if matched:
             slots["file"] = matched
             slots["path"] = matched
@@ -333,14 +341,20 @@ def _default_command_slots(query: str, context: object, signals: Mapping[str, st
             slots["source"] = candidates[0]
             slots["destination"] = candidates[1]
         if rename_slots:
-            slots["source"] = rename_slots["source"]
-            slots["destination"] = rename_slots["destination"]
+            slots["from_ext"] = rename_slots.get("from_ext", "")
+            slots["to_ext"] = rename_slots.get("to_ext", "")
 
     if any(word in query_text for word in ("copy", "duplicate")):
-        candidates = _candidate_paths(context)
-        if candidates:
-            slots["source"] = candidates[0]
-            slots["destination"] = str(Path(candidates[0]).with_suffix(".copy"))
+        source = slots.get("file") or slots.get("path", "")
+        if source in (".", "", None):
+            source = _match_context_path(context)
+        to_match = re.search(r"\bto\s+(\S+)", query_text)
+        if to_match and source:
+            slots["source"] = source
+            slots["destination"] = to_match.group(1)
+        elif source:
+            slots["source"] = source
+            slots["destination"] = str(Path(source).with_suffix(".copy"))
 
     if any(word in query_text for word in ("run", "execute")):
         matched = _match_context_path(context, extensions=(".py", ".sh", ".js", ".ts"))
@@ -348,7 +362,9 @@ def _default_command_slots(query: str, context: object, signals: Mapping[str, st
             slots["file"] = matched
 
     if any(word in query_text for word in ("delete", "remove", "erase")):
-        slots["path"] = _match_context_path(context)
+        matched = _match_context_path(context)
+        if matched and (not slots.get("path") or slots["path"] in (".", "")):
+            slots["path"] = matched
 
     return slots
 
@@ -451,9 +467,9 @@ def _infer_slots(query: str, context: object, signals: Mapping[str, str]) -> dic
         slots["hours"] = signals["hours"]
     if "size" in signals:
         slots["size"] = signals["size"]
-    if any(word in text.lower() for word in ("directory", "directories", "folder", "folders")):
+    if any(word in query.lower() for word in ("directory", "directories", "folder", "folders")):
         slots["kind"] = "d"
-    elif any(word in text.lower() for word in ("file", "files")):
+    elif any(word in query.lower() for word in ("file", "files")):
         slots["kind"] = "f"
     return slots
 
@@ -496,9 +512,11 @@ def fill_template(template: str, slots: Mapping[str, str]) -> str | None:
         value = slots.get(key)
         if value in (None, ""):
             return match.group(0)
-        if key in {"file", "path", "target", "source", "destination", "dir", "archive"}:
-            return shlex.quote(str(value))
-        return str(value)
+        before = match.string[match.start() - 1] if match.start() > 0 else ""
+        after = match.string[match.end()] if match.end() < len(match.string) else ""
+        if (before == "'" and after == "'") or (before == '"' and after == '"'):
+            return str(value)
+        return shlex.quote(str(value))
 
     rendered = PLACEHOLDER_RE.sub(replace, template)
     if PLACEHOLDER_RE.search(rendered):
@@ -533,6 +551,12 @@ def _score_command(name: str, spec: Mapping[str, object], tokens: Sequence[str],
             score += 12
             if template_key in templates:
                 score += 5
+                template = templates[template_key]
+                slot_values = _default_command_slots(query, "", signals)
+                placeholders = PLACEHOLDER_RE.findall(template)
+                query_filled = sum(1 for p in placeholders if slot_values.get(p, "") not in (".", "", None))
+                if query_filled == len(placeholders) and query_filled > 0:
+                    score += 15
 
     for key in templates:
         if key in query:
@@ -548,8 +572,15 @@ def _score_command(name: str, spec: Mapping[str, object], tokens: Sequence[str],
     if "days" in signals and any(word in keywords for word in ("older", "mtime", "log", "files")):
         score += 3
 
-    if name in {"mv", "cp", "rm"} and any(word in query for word in ("rename", "move", "copy", "delete", "remove")):
+    if name == "mv" and any(word in query for word in ("rename", "move")):
         score += 10
+    if name == "cp" and any(word in query for word in ("copy", "duplicate")):
+        score += 10
+        if " to " in query:
+            score += 10
+    if name == "rm" and any(word in query for word in ("delete", "remove", "erase")):
+        score += 10
+
 
     best_template = ""
     best_template_score = -1
@@ -569,16 +600,35 @@ def _choose_template(spec: Mapping[str, object], query: str, intents: Sequence[s
     if not templates:
         return ""
 
+    if "from_ext" in slots and "to_ext" in slots and slots["from_ext"] and slots["to_ext"]:
+        rename_template = templates.get("rename")
+        if rename_template:
+            return rename_template
+
+    if "days" in signals:
+        for key in ("mtime", "files", "directories", "size"):
+            template = templates.get(key)
+            if template:
+                return template
+
     if any(word in query for word in ("directory", "directories", "folder", "folders")):
         for key in ("directories", "type", "list", "basic"):
             template = templates.get(key)
             if template and ("-type d" in template or key in {"directories", "type", "list"}):
                 return template
     if any(word in query for word in ("file", "files")):
-        for key in ("files", "type", "basic", "name"):
-            template = templates.get(key)
-            if template and ("-type f" in template or key in {"files", "type", "basic", "name"}):
-                return template
+        ext_match = re.search(r"\.([a-z0-9]+)", query)
+        has_pattern_words = any(w in query for w in ("name", "extension", "called", "pattern"))
+        if ext_match or has_pattern_words:
+            for key in ("name", "files", "type", "basic"):
+                template = templates.get(key)
+                if template:
+                    return template
+        else:
+            for key in ("files", "type", "basic", "name"):
+                template = templates.get(key)
+                if template:
+                    return template
 
     for intent in intents:
         mapped = intent_map.get(intent)
@@ -616,7 +666,7 @@ def rank_candidates(query: str, context: object = "", os_info: object | None = N
     tokens = correct_typos(tokens, vocabulary)
     tokens = expand_synonyms(tokens)
     intents = extract_intent(query_text)
-    hints = hints_from_context(query_text, context)
+    hints = hints_from_context(context)
     signals = extract_numbers(query_text)
     slot_values = _default_command_slots(query_text, context, signals)
 

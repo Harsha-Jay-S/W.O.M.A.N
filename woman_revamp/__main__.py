@@ -1,8 +1,4 @@
-from .bootstrap import ensure_runtime_dependencies
-
-ensure_runtime_dependencies()
-
-from .cli import main
+from .entrypoint import main
 
 
 if __name__ == "__main__":

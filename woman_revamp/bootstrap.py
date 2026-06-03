@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from importlib.util import find_spec
 from shutil import which
+
+from .errors import WomanError
 
 
 REQUIRED_UI_PACKAGES = ("rich", "questionary")
@@ -24,6 +27,8 @@ def prompt_install_missing(missing: list[str]) -> bool:
         return True
     print("woman_revamp needs these missing dependencies:")
     print("  " + ", ".join(missing))
+    if not sys.stdin.isatty():
+        return False
     answer = input("Install them now and continue? [y/N]: ").strip().lower()
     if answer not in {"y", "yes"}:
         return False
@@ -40,6 +45,9 @@ def ensure_runtime_dependencies() -> None:
     if not missing:
         return
     if not prompt_install_missing(missing):
-        raise SystemExit(1)
-    subprocess.run([sys.executable, *sys.argv], check=False)
-    raise SystemExit(0)
+        raise WomanError(
+            action="start woman",
+            reason="required dependencies are missing",
+            hint="Install rich and questionary with `uv pip install -e .[ui]` or `python -m pip install -e .[ui]`.",
+        )
+    os.execv(sys.executable, [sys.executable, *sys.argv])

@@ -11,6 +11,7 @@ from .engine import (
 )
 from .config import WomanConfig
 from .registry import get_registry
+from .ml import WomanReranker
 
 __all__ = [
     "MIN_CONFIDENCE",
@@ -19,6 +20,7 @@ __all__ = [
     "extract_numbers",
     "fill_template",
     "get_registry",
+    "WomanReranker",
     "WomanConfig",
     "rank_candidates",
     "tokenize",

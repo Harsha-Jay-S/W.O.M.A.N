@@ -8,15 +8,15 @@ version = "0.1.0"
 description = "Local command registry and scoring engine"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["joblib>=1.4.0", "pandas>=2.2.0", "scikit-learn>=1.5.0"]
 
 [project.optional-dependencies]
 ui = ["rich>=13.0.0", "questionary>=2.0.0"]
 test = ["pytest>=8.0.0", "pytest-cov>=5.0.0", "pytest-mock>=3.14.0"]
 
 [project.scripts]
-woman = "woman_revamp.cli:main"
-woman-revamp = "woman_revamp.cli:main"
+woman = "woman_revamp.entrypoint:main"
+woman-revamp = "woman_revamp.entrypoint:main"
 
 [tool.setuptools]
 include-package-data = true

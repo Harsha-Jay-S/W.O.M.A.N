@@ -37,22 +37,18 @@ You type what you want in plain English. `woman` grabs context first — your OS
 
 ## Installation
 
-### 1. Install via `uv` or `pip`
-
 ```bash
-uv pip install -e .[ui]
-# OR: python3 -m pip install -e .[ui]
-# OR: bash install.sh
+git clone https://github.com/Harsha-Jay-S/W.O.M.A.N.git
+cd W.O.M.A.N
+bash install.sh
 ```
 
-### 2. Add the alias
-
+Or with `pip`:
 ```bash
-alias woman='python3 -m woman_revamp'
+pip install -e .[ui]
 ```
 
-### 3. Run setup
-
+Then run setup:
 ```bash
 woman config
 ```
@@ -129,24 +125,51 @@ woman "your query"
  subprocess → your shell → output
 ```
 
----
+## Architecture
 
-## Disclaimer
-
-Written entirely by an LLM. I (the human who prompted it into existence) take no responsibility for what it suggests or runs.
-
-If you `y` a command and something breaks, that's on you. The confirmation prompt is there so you actually read the command first. Use it.
+```text
+User Query
+       │
+       ▼
+ Context Collector
+ ┌─────────────────────────────────────────────┐
+ │ OS, cwd contents, shell history             │
+ └─────────────────────────────────────────────┘
+       │
+       ▼
+ Tool Discovery Layer
+ ┌─────────────────────────────────────────────┐
+ │ PATH scanning + local registry              │
+ └─────────────────────────────────────────────┘
+       │
+       ▼
+ Command Knowledge Layer
+ ┌─────────────────────────────────────────────┐
+ │ man pages / --help / JIT parsing            │
+ └─────────────────────────────────────────────┘
+       │
+       ▼
+ ML Re-ranker
+ ┌─────────────────────────────────────────────┐
+ │ Local heuristic scoring & intent matching   │
+ └─────────────────────────────────────────────┘
+       │
+       ▼
+ Provider Layer
+ ┌─────────────────────────────────────────────┐
+ │ Ollama / OpenAI / Gemini / Anthropic        │
+ │ or offline fallback                         │
+ └─────────────────────────────────────────────┘
+       │
+       ▼
+ Generated Command
+       │
+       ▼
+ Execution Confirmation
+```
 
 ---
 
 ## License
 
 MIT. Use it, fork it, rename it, ignore it.
-
----
-
-<div align="center">
-
-*Built because `man` existed and `woman` didn't.*
-
-</div>

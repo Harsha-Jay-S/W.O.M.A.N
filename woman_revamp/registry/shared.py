@@ -37,8 +37,11 @@ COMMANDS: dict[str, dict] = {
     },
     "mv": {
         "keywords": ["move", "rename", "relocate", "files", "folders"],
-        "templates": {"basic": "mv {source} {destination}"},
-        "intent_map": {"move": "basic"},
+        "templates": {
+            "basic": "mv {source} {destination}",
+            "rename": "for f in *.{from_ext}; do mv -- \"$f\" \"${f%.{from_ext}}.{to_ext}\"; done",
+        },
+        "intent_map": {"move": "basic", "rename": "rename"},
     },
     "rm": {
         "keywords": ["delete", "remove", "erase", "files", "folders"],

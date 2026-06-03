@@ -64,7 +64,8 @@ def _placeholder_for(argument: str | None) -> str:
 
 def _capture(tool: str, args: list[str], limit: int | None = None) -> str:
     try:
-        completed = subprocess.run([tool, *args], capture_output=True, text=True, timeout=2, check=False)
+        timeout_limit = 30 if tool == "man" else 2
+        completed = subprocess.run([tool, *args], capture_output=True, text=True, timeout=timeout_limit, check=False)
     except (FileNotFoundError, subprocess.SubprocessError, OSError):
         return ""
     output = (completed.stdout or "") + "\n" + (completed.stderr or "")
