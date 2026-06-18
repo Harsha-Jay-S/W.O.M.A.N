@@ -17,6 +17,32 @@ from .registry.extension_hints import EXTENSION_HINTS
 from .registry.intent_phrases import INTENT_PHRASES
 from .registry.modifiers import FLAGS_AWARE_COMMANDS, MODIFIER_FLAGS
 from .registry.numbers import NUMBER_PATTERNS
+
+_TEMPORAL_DAYS: dict[str, str] = {
+    "today": "-1",
+    "yesterday": "-2",
+    "this week": "-7",
+    "last week": "-7",
+    "past week": "-7",
+}
+
+_LANGUAGE_EXTENSIONS: dict[str, str] = {
+    "python": "*.py",
+    "javascript": "*.js",
+    "typescript": "*.ts",
+    "ruby": "*.rb",
+    "java": "*.java",
+    "golang": "*.go",
+    "go": "*.go",
+    "rust": "*.rs",
+    "shell": "*.sh",
+    "bash": "*.sh",
+    "css": "*.css",
+    "html": "*.html",
+    "markdown": "*.md",
+    "yaml": "*.yaml",
+    "json": "*.json",
+}
 from .registry.pipes import PIPE_PATTERNS
 from .registry.runners import RUNNERS, RUNNABLE_EXTENSIONS
 from .registry.synonyms import SYNONYMS
@@ -318,6 +344,10 @@ def extract_numbers(query: str) -> dict[str, str]:
 
     text = normalize_query(query)
     signals: dict[str, str] = {}
+    for phrase, value in _TEMPORAL_DAYS.items():
+        if phrase in text:
+            signals["days"] = value
+            break
     for name, pattern in NUMBER_PATTERNS.items():
         match = re.search(pattern, text)
         if not match:
@@ -633,6 +663,12 @@ def _infer_slots(
         slots["kind"] = "d"
     elif any(word in query.lower() for word in ("file", "files")):
         slots["kind"] = "f"
+    q_lower = query.lower()
+    if any(w in q_lower for w in ("file", "files", "code")):
+        for lang, ext_pattern in _LANGUAGE_EXTENSIONS.items():
+            if lang in q_lower:
+                slots["pattern"] = ext_pattern
+                break
     return slots
 
 
@@ -841,6 +877,16 @@ def _choose_template(
                 return templates[key]
 
     if "days" in signals:
+        q_lower = query.lower()
+        has_lang = any(
+            lang in q_lower and any(w in q_lower for w in ("files", "file", "code"))
+            for lang in _LANGUAGE_EXTENSIONS
+        )
+        if has_lang:
+            for key in ("mtime_name", "mtime"):
+                template = templates.get(key)
+                if template:
+                    return template
         for key in ("mtime", "files", "directories", "size"):
             template = templates.get(key)
             if template:
@@ -856,7 +902,9 @@ def _choose_template(
         has_pattern_words = any(
             w in query for w in ("name", "extension", "called", "pattern")
         )
-        if ext_match or has_pattern_words:
+        q_lower = query.lower()
+        has_lang = any(lang in q_lower for lang in _LANGUAGE_EXTENSIONS)
+        if ext_match or has_pattern_words or has_lang:
             for key in ("name", "files", "type", "basic"):
                 template = templates.get(key)
                 if template:

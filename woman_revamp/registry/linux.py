@@ -19,6 +19,7 @@ COMMANDS: dict[str, dict] = {
             "directories": "find {path} -type d",
             "files": "find {path} -type f",
             "mtime": "find {path} -type {kind} -mtime {days}",
+            "mtime_name": "find {path} -name '{pattern}' -type {kind} -mtime {days}",
             "size": "find {path} -type f -size {size}",
             "delete": "find {path} -type f -name '{pattern}' -delete",
         },
