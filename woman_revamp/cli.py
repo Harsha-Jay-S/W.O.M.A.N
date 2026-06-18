@@ -487,6 +487,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     # Subcommand mode detection
     if argv is None:
         argv = (sys.argv[1:] if hasattr(sys, "argv") else [])
+    # No args → show subcommand help and exit cleanly
+    if not argv:
+        build_subcommand_parser().print_help()
+        return 0
+    # --help / -h → delegate to subcommand parser so user sees subcommand interface
+    if argv[0] in ("--help", "-h"):
+        build_subcommand_parser().parse_args(["--help"])  # raises SystemExit(0)
     if argv and argv[0] in _SUBCOMMANDS:
         sub_parser = build_subcommand_parser()
         sub_args = sub_parser.parse_args(argv)

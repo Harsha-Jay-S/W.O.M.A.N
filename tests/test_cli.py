@@ -192,6 +192,97 @@ class TestHandleSubcommand:
         assert rc == 1
 
 
+# ── Entrypoint routing tests (the "Queen" phase fix) ──────────────────────────
+
+class TestMainHelpInterface:
+    """--help should surface the subcommand interface, not the legacy flat flags."""
+
+    def test_help_flag_prog_name_is_woman_not_woman_revamp(self, capsys):
+        with pytest.raises(SystemExit) as exc:
+            main(["--help"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        assert "woman-revamp" not in out
+
+    def test_help_flag_lists_search_subcommand(self, capsys):
+        with pytest.raises(SystemExit):
+            main(["--help"])
+        out = capsys.readouterr().out
+        assert "search" in out
+
+    def test_help_flag_lists_explain_subcommand(self, capsys):
+        """'explain' must appear as a subcommand, not just the --explain flag name."""
+        with pytest.raises(SystemExit):
+            main(["--help"])
+        out = capsys.readouterr().out
+        # Subcommand parsers list choices like "{search,s,list,explain,...}"
+        # Legacy parser shows "--explain" but NOT "explain" as a standalone word
+        assert "explain" in out and "--explain" not in out
+
+    def test_help_flag_lists_history_subcommand(self, capsys):
+        """'history' must appear as a listed subcommand, not in a flag description."""
+        with pytest.raises(SystemExit):
+            main(["--help"])
+        out = capsys.readouterr().out
+        # Legacy help has "history" only inside "--context ... or history" description.
+        # Subcommand help lists it as a first-class subcommand name.
+        assert "history" in out and "--context" not in out
+
+
+class TestMainNoArgs:
+    """woman with no args should print usage, not silently do nothing."""
+
+    def test_no_args_prints_usage_containing_woman(self, capsys):
+        main([])
+        out = capsys.readouterr().out
+        assert "woman" in out
+
+    def test_no_args_returns_0(self):
+        rc = main([])
+        assert rc == 0
+
+
+class TestMainLegacyBackwardsCompat:
+    """Old flags must keep working after the routing refactor."""
+
+    def _setup(self, monkeypatch, tmp_path):
+        import woman_revamp.cli as _cli
+        monkeypatch.setattr(_cli, "CONFIG_FILE", tmp_path / "config.yaml")
+        monkeypatch.setattr(_cli, "run_setup", lambda: None)
+
+    def test_legacy_list_flag_returns_0(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        assert main(["--list"]) == 0
+
+    def test_legacy_list_flag_with_os_returns_0(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        assert main(["--list", "--os", "linux"]) == 0
+
+    def test_legacy_json_flag_returns_0(self, monkeypatch, tmp_path, capsys):
+        self._setup(monkeypatch, tmp_path)
+        rc = main(["--json", "find", "files"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert out.strip().startswith("[")
+
+    def test_legacy_dry_run_flag_returns_0(self, monkeypatch, tmp_path, capsys):
+        self._setup(monkeypatch, tmp_path)
+        rc = main(["--dry-run", "list", "files"])
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Dry run" in out
+
+    def test_legacy_refresh_index_flag_returns_0(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        monkeypatch.setattr("woman_revamp.cli.refresh_registry_cache", lambda **kw: None)
+        assert main(["--refresh-index"]) == 0
+
+    def test_legacy_index_tool_flag_returns_0(self, monkeypatch, tmp_path):
+        self._setup(monkeypatch, tmp_path)
+        monkeypatch.setattr("woman_revamp.cli.index_one", lambda tool, **kw: None)
+        assert main(["--index-tool", "find"]) == 0
+
+
 class TestClipboard:
 
     def test_copy_to_clipboard_returns_bool(self, monkeypatch):
