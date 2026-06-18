@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import shutil
-from pathlib import Path
-from typing import Any
 
-from ..config import REGISTRY_CACHE_FILE, STATE_FILE, ensure_directories, read_json, write_json
+from ..config import (
+    REGISTRY_CACHE_FILE,
+    STATE_FILE,
+    ensure_directories,
+    read_json,
+    write_json,
+)
 from .parser import parse_tool, parse_tool_with_ai
 from .providers import AIProviderSpec
 from .scanner import discover_path_tools, snapshot_path_state
@@ -25,7 +28,11 @@ def load_cached_registry() -> dict[str, dict]:
     if isinstance(data, dict):
         commands = data.get("commands", {})
         if isinstance(commands, dict):
-            return {str(name): dict(spec) for name, spec in commands.items() if isinstance(spec, dict)}
+            return {
+                str(name): dict(spec)
+                for name, spec in commands.items()
+                if isinstance(spec, dict)
+            }
     return {}
 
 
@@ -39,7 +46,10 @@ def _load_state() -> RegistryState:
         snapshot = {}
     if not isinstance(tools, list):
         tools = []
-    return RegistryState(path_snapshot={str(k): float(v) for k, v in snapshot.items()}, tools=[str(item) for item in tools])
+    return RegistryState(
+        path_snapshot={str(k): float(v) for k, v in snapshot.items()},
+        tools=[str(item) for item in tools],
+    )
 
 
 def registry_needs_refresh() -> bool:
@@ -51,7 +61,12 @@ def registry_needs_refresh() -> bool:
     return current_tools != state.tools
 
 
-def _build_dynamic_registry(tools: list[str], provider: AIProviderSpec | None = None, ai_mode: bool = False, man_page_limit: int = 300) -> dict[str, dict]:
+def _build_dynamic_registry(
+    tools: list[str],
+    provider: AIProviderSpec | None = None,
+    ai_mode: bool = False,
+    man_page_limit: int = 300,
+) -> dict[str, dict]:
     commands: dict[str, dict] = {}
     for name in tools:
         if not shutil.which(name):
@@ -68,11 +83,17 @@ def _build_dynamic_registry(tools: list[str], provider: AIProviderSpec | None = 
     return commands
 
 
-def refresh_registry_cache(provider: AIProviderSpec | None = None, ai_mode: bool = False, man_page_limit: int = 300) -> dict[str, dict]:
+def refresh_registry_cache(
+    provider: AIProviderSpec | None = None,
+    ai_mode: bool = False,
+    man_page_limit: int = 300,
+) -> dict[str, dict]:
     ensure_directories()
     tools = discover_path_tools()
     current_state = snapshot_path_state()
-    commands = _build_dynamic_registry(tools, provider=provider, ai_mode=ai_mode, man_page_limit=man_page_limit)
+    commands = _build_dynamic_registry(
+        tools, provider=provider, ai_mode=ai_mode, man_page_limit=man_page_limit
+    )
     write_json(REGISTRY_CACHE_FILE, {"commands": commands})
     write_json(STATE_FILE, {"path_snapshot": current_state, "tools": tools})
     from ..registry import get_registry

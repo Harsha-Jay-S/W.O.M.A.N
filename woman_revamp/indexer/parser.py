@@ -65,7 +65,13 @@ def _placeholder_for(argument: str | None) -> str:
 def _capture(tool: str, args: list[str], limit: int | None = None) -> str:
     try:
         timeout_limit = 30 if tool == "man" else 2
-        completed = subprocess.run([tool, *args], capture_output=True, text=True, timeout=timeout_limit, check=False)
+        completed = subprocess.run(
+            [tool, *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout_limit,
+            check=False,
+        )
     except (FileNotFoundError, subprocess.SubprocessError, OSError):
         return ""
     output = (completed.stdout or "") + "\n" + (completed.stderr or "")
@@ -97,7 +103,14 @@ def extract_sections(text: str) -> dict[str, str]:
     current = ""
     for line in clean.splitlines():
         header = line.strip().lower()
-        if header in {"name", "synopsis", "description", "options", "commands", "examples"}:
+        if header in {
+            "name",
+            "synopsis",
+            "description",
+            "options",
+            "commands",
+            "examples",
+        }:
             current = header
             sections.setdefault(current, [])
             continue
@@ -166,10 +179,44 @@ def parse_tool_jit(tool: str, man_page_limit: int = 300) -> ParsedManPage:
                 continue
             options.append({"flag": flag, "argument": argument, "line": line.strip()})
     keywords = _keywords_from_sections(tool, text)
-    return ParsedManPage(tool=tool, synopsis=synopsis, options=options, keywords=keywords)
+    return ParsedManPage(
+        tool=tool, synopsis=synopsis, options=options, keywords=keywords
+    )
 
 
-def parse_tool_with_ai(tool: str, provider: dict[str, str] | AIProviderSpec, man_page_limit: int = 300) -> ParsedManPage:
+_AI_PROMPT_TEMPLATE = """\
+Return ONLY valid JSON matching this schema exactly:
+{{
+  "tool": "{tool}",
+  "keywords": ["search", "locate", "file", "directory"],
+  "templates": {{
+    "basic":  "{tool} {{path}}",
+    "verbose": "{tool} -v {{path}}"
+  }},
+  "intent_map": {{"search": "basic", "verbose": "verbose"}}
+}}
+
+Rules:
+- Use {{placeholder}} for user-supplied values
+- template keys must be lowercase single words
+- keywords: 4-12 terms, lowercase, no punctuation
+- No explanation, no markdown, only JSON
+
+Tool to parse: {tool}
+Man page (first {limit} lines):
+{man_page}
+"""
+
+
+def parse_tool_with_ai(
+    tool: str,
+    provider: dict[str, str] | AIProviderSpec,
+    man_page_limit: int = 300,
+    context_hint: dict | None = None,
+) -> ParsedManPage:
+    import hashlib
+    from .ai_cache import ai_cache_key, load_ai_cache, save_ai_cache
+
     if isinstance(provider, AIProviderSpec):
         spec = provider
     else:
@@ -179,38 +226,80 @@ def parse_tool_with_ai(tool: str, provider: dict[str, str] | AIProviderSpec, man
             api_key=str(provider.get("api_key", provider.get("ai_api_key", ""))),
             model=str(provider.get("model", provider.get("ai_backend", ""))),
         )
-    prompt = (
-        f"Return strict JSON for the command '{tool}' with keys tool, synopsis, keywords, options. "
-        "options must be a list of objects containing flag, argument, and template."
+
+    # Get man page text first — needed for both the cache key and the prompt
+    man_text = _help_text(tool, man_page_limit=man_page_limit)
+
+    # Structured prompt with optional context injection
+    context_block = ""
+    if context_hint:
+        parts = []
+        if context_hint.get("os"):
+            parts.append(f"OS: {context_hint['os']}")
+        if context_hint.get("project_type"):
+            parts.append(f"Project type: {context_hint['project_type']}")
+        if context_hint.get("recent_files"):
+            parts.append(f"Recent files: {', '.join(str(f) for f in context_hint['recent_files'][:5])}")
+        if parts:
+            context_block = "Context: " + " | ".join(parts) + "\n"
+
+    prompt = context_block + _AI_PROMPT_TEMPLATE.format(
+        tool=tool,
+        limit=man_page_limit,
+        man_page=man_text or "(no man page available)",
     )
-    raw = fetch_provider_text(spec, prompt)
+
+    # Check cache before calling the provider
+    man_hash = hashlib.md5((man_text or tool).encode()).hexdigest()
+    cache_key = ai_cache_key(tool, spec.provider, spec.model, man_hash)
+    cache = load_ai_cache()
+    if cache_key in cache:
+        raw = cache[cache_key].get("raw", "")
+    else:
+        raw = fetch_provider_text(spec, prompt)
+        if raw:
+            cache[cache_key] = {"raw": raw}
+            save_ai_cache(cache)
+
     if not raw:
         return parse_tool_jit(tool, man_page_limit=man_page_limit)
+
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
         return parse_tool_jit(tool, man_page_limit=man_page_limit)
-    options = parsed.get("options", []) if isinstance(parsed, dict) else []
-    normalized: list[dict[str, str]] = []
-    for item in options if isinstance(options, list) else []:
-        if not isinstance(item, dict):
-            continue
-        normalized.append(
-            {
-                "flag": str(item.get("flag", "")),
-                "argument": str(item.get("argument", "")),
-                "line": str(item.get("template", "")),
-            }
-        )
-    synopsis = str(parsed.get("synopsis", "")) if isinstance(parsed, dict) else ""
-    keywords = [str(item) for item in parsed.get("keywords", [])] if isinstance(parsed, dict) else [tool]
-    return ParsedManPage(tool=tool, synopsis=synopsis, options=normalized, keywords=keywords or [tool])
+
+    if not isinstance(parsed, dict):
+        return parse_tool_jit(tool, man_page_limit=man_page_limit)
+
+    # Validate required keys
+    templates_raw = parsed.get("templates", {})
+    keywords_raw = parsed.get("keywords", [])
+    if not isinstance(templates_raw, dict) or not isinstance(keywords_raw, list):
+        return parse_tool_jit(tool, man_page_limit=man_page_limit)
+
+    # Convert structured response into ParsedManPage options format
+    options: list[dict[str, str]] = []
+    for tmpl_key, tmpl_val in templates_raw.items():
+        options.append({"flag": tmpl_key, "argument": "", "line": str(tmpl_val)})
+
+    synopsis = str(parsed.get("synopsis", ""))
+    keywords = [str(k) for k in keywords_raw if isinstance(k, str)] or [tool]
+    return ParsedManPage(
+        tool=tool, synopsis=synopsis, options=options, keywords=keywords
+    )
 
 
 def parse_tool(tool: str, man_page_limit: int = 300) -> ToolSpec:
     text = _help_text(tool, man_page_limit=man_page_limit)
     if not text:
-        return ToolSpec(keywords=[tool], templates={"default": tool}, intent_map={"run": "default"})
+        return ToolSpec(
+            keywords=[tool], templates={"default": tool}, intent_map={"run": "default"}
+        )
     keywords = _keywords_from_sections(tool, text)
     templates = _templates_from_text(tool, text)
-    return ToolSpec(keywords=keywords, templates=templates, intent_map={"run": "default", "status": "default", "help": "help"})
+    return ToolSpec(
+        keywords=keywords,
+        templates=templates,
+        intent_map={"run": "default", "status": "default", "help": "help"},
+    )

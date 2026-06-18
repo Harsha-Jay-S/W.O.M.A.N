@@ -10,7 +10,13 @@ from woman_revamp.errors import WomanError, render_user_error
 
 
 def test_render_user_error_for_custom_error():
-    message = render_user_error(WomanError(action="refresh the registry", reason="the cache file is locked", hint="Try again in a moment."))
+    message = render_user_error(
+        WomanError(
+            action="refresh the registry",
+            reason="the cache file is locked",
+            hint="Try again in a moment.",
+        )
+    )
     assert "could not refresh the registry" in message
     assert "locked" in message
 

@@ -52,10 +52,37 @@ class WomanConfig:
         data = read_json(CONFIG_FILE, {})
         if not isinstance(data, dict):
             data = {}
-        return cls(**{key: data.get(key, getattr(cls, key)) for key in cls.__annotations__})
+        kwargs: dict[str, object] = {}
+        hints = cls.__annotations__
+        for key in hints:
+            default = getattr(cls, key)
+            value = data.get(key, default)
+            try:
+                expected = type(default)
+                if not isinstance(value, expected):
+                    value = expected(value)
+            except (TypeError, ValueError):
+                value = default
+            kwargs[key] = value
+        return cls(**kwargs)
 
     def save(self) -> None:
         write_json(CONFIG_FILE, asdict(self))
+
+    @classmethod
+    def defaults(cls) -> "WomanConfig":
+        """Return a usable config with sensible defaults, no file required."""
+        return cls(
+            ui_mode="basic",
+            ai_provider="none",
+            ai_backend="",
+            ai_endpoint="",
+            ai_api_key="",
+            auto_update_registry=True,
+            auto_refresh_prompt=False,
+            index_mode="jit",
+            man_page_limit=300,
+        )
 
 
 def load_config() -> WomanConfig:

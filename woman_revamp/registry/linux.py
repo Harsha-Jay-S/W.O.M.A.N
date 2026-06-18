@@ -2,7 +2,17 @@
 
 COMMANDS: dict[str, dict] = {
     "find": {
-        "keywords": ["files", "directories", "search", "name", "type", "mtime", "size", "delete", "older"],
+        "keywords": [
+            "files",
+            "directories",
+            "search",
+            "name",
+            "type",
+            "mtime",
+            "size",
+            "delete",
+            "older",
+        ],
         "templates": {
             "name": "find {path} -name '{pattern}'",
             "type": "find {path} -type {kind}",
@@ -41,7 +51,16 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"network": "addr", "list": "addr"},
     },
     "systemctl": {
-        "keywords": ["service", "daemon", "status", "start", "stop", "restart", "enable", "disable"],
+        "keywords": [
+            "service",
+            "daemon",
+            "status",
+            "start",
+            "stop",
+            "restart",
+            "enable",
+            "disable",
+        ],
         "templates": {
             "status": "systemctl status {service}",
             "start": "systemctl start {service}",
@@ -50,7 +69,12 @@ COMMANDS: dict[str, dict] = {
             "enable": "systemctl enable {service}",
             "disable": "systemctl disable {service}",
         },
-        "intent_map": {"status": "status", "start": "start", "stop": "stop", "restart": "restart"},
+        "intent_map": {
+            "status": "status",
+            "start": "start",
+            "stop": "stop",
+            "restart": "restart",
+        },
     },
     "journalctl": {
         "keywords": ["logs", "journal", "service", "errors", "follow", "today"],
@@ -62,7 +86,7 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"monitor": "follow", "status": "errors"},
     },
     "df": {
-        "keywords": ["disk", "space", "filesystem", "usage"],
+        "keywords": ["disk", "space", "filesystem", "usage", "free", "storage", "how much"],
         "templates": {
             "human": "df -h",
             "inode": "df -hi",
@@ -78,7 +102,7 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"disk": "summary", "status": "summary"},
     },
     "ps": {
-        "keywords": ["process", "pid", "memory", "cpu", "jobs"],
+        "keywords": ["process", "processes", "pid", "memory", "cpu", "jobs", "running", "show"],
         "templates": {
             "tree": "ps auxf",
             "cpu": "ps aux --sort=-%cpu | head",
@@ -126,11 +150,19 @@ COMMANDS: dict[str, dict] = {
             "remove": "sudo apt remove {package}",
             "search": "apt search {package}",
         },
-        "intent_map": {"install": "install", "update": "update", "upgrade": "upgrade", "remove": "remove"},
+        "intent_map": {
+            "install": "install",
+            "update": "update",
+            "upgrade": "upgrade",
+            "remove": "remove",
+        },
     },
     "mount": {
         "keywords": ["filesystem", "disk", "attach", "mount", "volume"],
-        "templates": {"list": "mount | column -t", "mount": "sudo mount {device} {path}"},
+        "templates": {
+            "list": "mount | column -t",
+            "mount": "sudo mount {device} {path}",
+        },
         "intent_map": {"disk": "list"},
     },
     "umount": {
@@ -145,12 +177,18 @@ COMMANDS: dict[str, dict] = {
     },
     "awk": {
         "keywords": ["field", "csv", "columns", "filter", "print"],
-        "templates": {"print": "awk '{print ${column}}' {file}", "csv": "awk -F, '{print $1}' {file}"},
+        "templates": {
+            "print": "awk '{print ${column}}' {file}",
+            "csv": "awk -F, '{print $1}' {file}",
+        },
         "intent_map": {"search": "print", "list": "print"},
     },
     "sed": {
         "keywords": ["replace", "edit", "stream", "text"],
-        "templates": {"replace": "sed -i 's/{old}/{new}/g' {file}", "delete": "sed '/{pattern}/d' {file}"},
+        "templates": {
+            "replace": "sed -i 's/{old}/{new}/g' {file}",
+            "delete": "sed '/{pattern}/d' {file}",
+        },
         "intent_map": {"convert": "replace", "remove": "delete"},
     },
     "ping": {

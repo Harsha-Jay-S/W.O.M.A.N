@@ -3,14 +3,22 @@ from woman_revamp.engine import call_local_registry, fill_template
 
 
 def test_fill_template_requires_days():
-    assert fill_template("find {path} -type {kind} -mtime {days}", {"path": ".", "kind": "d"}) is None
+    assert (
+        fill_template(
+            "find {path} -type {kind} -mtime {days}", {"path": ".", "kind": "d"}
+        )
+        is None
+    )
 
 
 def test_fill_template_renders_when_complete():
-    assert fill_template(
-        "find {path} -type {kind} -mtime {days}",
-        {"path": ".", "kind": "d", "days": "7"},
-    ) == "find . -type d -mtime 7"
+    assert (
+        fill_template(
+            "find {path} -type {kind} -mtime {days}",
+            {"path": ".", "kind": "d", "days": "7"},
+        )
+        == "find . -type d -mtime 7"
+    )
 
 
 def test_directory_query_prefers_directory_find():

@@ -13,7 +13,11 @@ COMMANDS: dict[str, dict] = {
     },
     "open": {
         "keywords": ["file", "app", "url", "reveal", "show"],
-        "templates": {"file": "open {file}", "url": "open {url}", "reveal": "open -R {file}"},
+        "templates": {
+            "file": "open {file}",
+            "url": "open {url}",
+            "reveal": "open -R {file}",
+        },
         "intent_map": {"run": "file", "list": "reveal"},
     },
     "pbcopy": {
@@ -51,17 +55,26 @@ COMMANDS: dict[str, dict] = {
     },
     "screencapture": {
         "keywords": ["screenshot", "capture", "screen"],
-        "templates": {"full": "screencapture {file}", "region": "screencapture -i {file}"},
+        "templates": {
+            "full": "screencapture {file}",
+            "region": "screencapture -i {file}",
+        },
         "intent_map": {"create": "full"},
     },
     "networksetup": {
         "keywords": ["network", "wifi", "dns", "interface"],
-        "templates": {"list": "networksetup -listallhardwareports", "wifi": "networksetup -getairportnetwork {device}"},
+        "templates": {
+            "list": "networksetup -listallhardwareports",
+            "wifi": "networksetup -getairportnetwork {device}",
+        },
         "intent_map": {"network": "list"},
     },
     "osascript": {
         "keywords": ["automation", "script", "dialog", "app"],
-        "templates": {"dialog": "osascript -e 'display dialog \"{text}\"'", "run": "osascript {file}"},
+        "templates": {
+            "dialog": "osascript -e 'display dialog \"{text}\"'",
+            "run": "osascript {file}",
+        },
         "intent_map": {"run": "run", "create": "dialog"},
     },
     "say": {
@@ -71,17 +84,26 @@ COMMANDS: dict[str, dict] = {
     },
     "system_profiler": {
         "keywords": ["hardware", "software", "system", "info"],
-        "templates": {"hardware": "system_profiler SPHardwareDataType", "software": "system_profiler SPSoftwareDataType"},
+        "templates": {
+            "hardware": "system_profiler SPHardwareDataType",
+            "software": "system_profiler SPSoftwareDataType",
+        },
         "intent_map": {"status": "hardware"},
     },
     "security": {
         "keywords": ["keychain", "password", "certificate", "security"],
-        "templates": {"find": "security find-generic-password -l {label}", "unlock": "security unlock-keychain {file}"},
+        "templates": {
+            "find": "security find-generic-password -l {label}",
+            "unlock": "security unlock-keychain {file}",
+        },
         "intent_map": {"search": "find"},
     },
     "xattr": {
         "keywords": ["metadata", "attributes", "quarantine"],
-        "templates": {"list": "xattr -l {file}", "remove": "xattr -d {attribute} {file}"},
+        "templates": {
+            "list": "xattr -l {file}",
+            "remove": "xattr -d {attribute} {file}",
+        },
         "intent_map": {"list": "list", "remove": "remove"},
     },
     "mdfind": {

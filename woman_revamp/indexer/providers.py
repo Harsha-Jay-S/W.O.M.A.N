@@ -16,8 +16,17 @@ class AIProviderSpec:
     model: str = ""
 
 
-def _json_request(url: str, payload: dict[str, Any], headers: dict[str, str] | None = None, timeout: int = 15) -> dict[str, Any] | None:
-    req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers or {"Content-Type": "application/json"})
+def _json_request(
+    url: str,
+    payload: dict[str, Any],
+    headers: dict[str, str] | None = None,
+    timeout: int = 15,
+) -> dict[str, Any] | None:
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers or {"Content-Type": "application/json"},
+    )
     try:
         with request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8", errors="replace")
@@ -30,34 +39,78 @@ def _json_request(url: str, payload: dict[str, Any], headers: dict[str, str] | N
     return parsed if isinstance(parsed, dict) else None
 
 
+def _ollama_stream(url: str, payload: dict[str, Any], timeout: int = 180) -> str:
+    """Read Ollama NDJSON stream and return accumulated response text."""
+    req = request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with request.urlopen(req, timeout=timeout) as resp:
+            accumulated: list[str] = []
+            for line in resp:
+                if not line:
+                    continue
+                try:
+                    chunk = json.loads(line.decode("utf-8", errors="replace"))
+                except json.JSONDecodeError:
+                    continue
+                accumulated.append(chunk.get("response", ""))
+                if chunk.get("done"):
+                    break
+            return "".join(accumulated)
+    except (error.URLError, TimeoutError, OSError, ValueError):
+        return ""
+
+
 def provider_spec_from_config(config: object) -> AIProviderSpec:
     provider = str(getattr(config, "ai_provider", "none") or "none")
     endpoint = str(getattr(config, "ai_endpoint", "") or "")
     api_key = str(getattr(config, "ai_api_key", "") or "")
     model = str(getattr(config, "ai_backend", "") or "")
-    return AIProviderSpec(provider=provider, endpoint=endpoint, api_key=api_key, model=model)
+    return AIProviderSpec(
+        provider=provider, endpoint=endpoint, api_key=api_key, model=model
+    )
 
 
-def build_provider_payload(spec: AIProviderSpec, prompt: str) -> tuple[str, dict[str, Any], dict[str, str]] | None:
+def build_provider_payload(
+    spec: AIProviderSpec, prompt: str
+) -> tuple[str, dict[str, Any], dict[str, str]] | None:
     provider = spec.provider.lower()
     if provider == "ollama":
         endpoint = spec.endpoint.rstrip("/") or "http://localhost:11434"
         return (
             f"{endpoint}/api/generate",
-            {"model": spec.model or "llama3", "prompt": prompt, "stream": False},
+            {"model": spec.model or "llama3", "prompt": prompt, "stream": True},
             {"Content-Type": "application/json"},
         )
     if provider == "openai":
         return (
             spec.endpoint.rstrip("/") or "https://api.openai.com/v1/chat/completions",
-            {"model": spec.model or "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "temperature": 0},
-            {"Content-Type": "application/json", "Authorization": f"Bearer {spec.api_key}"},
+            {
+                "model": spec.model or "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0,
+            },
+            {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {spec.api_key}",
+            },
         )
     if provider == "anthropic":
         return (
             spec.endpoint.rstrip("/") or "https://api.anthropic.com/v1/messages",
-            {"model": spec.model or "claude-3-5-haiku-latest", "max_tokens": 1500, "messages": [{"role": "user", "content": prompt}]},
-            {"Content-Type": "application/json", "x-api-key": spec.api_key, "anthropic-version": "2023-06-01"},
+            {
+                "model": spec.model or "claude-3-5-haiku-latest",
+                "max_tokens": 1500,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            {
+                "Content-Type": "application/json",
+                "x-api-key": spec.api_key,
+                "anthropic-version": "2023-06-01",
+            },
         )
     if provider == "gemini":
         endpoint = spec.endpoint.rstrip("/")
@@ -78,17 +131,18 @@ def fetch_provider_text(spec: AIProviderSpec, prompt: str) -> str:
     if not payload:
         return ""
     url, body, headers = payload
-    timeout = 180 if spec.provider.lower() == "ollama" else 15
-    parsed = _json_request(url, body, headers, timeout=timeout)
-    if not parsed:
-        return ""
     provider = spec.provider.lower()
     if provider == "ollama":
-        return str(parsed.get("response", ""))
+        return _ollama_stream(url, body, timeout=180)
+    parsed = _json_request(url, body, headers, timeout=15)
+    if not parsed:
+        return ""
     if provider == "openai":
         choices = parsed.get("choices", [])
         if choices and isinstance(choices, list):
-            message = choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+            message = (
+                choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
+            )
             return str(message.get("content", ""))
         return ""
     if provider == "anthropic":
@@ -101,7 +155,11 @@ def fetch_provider_text(spec: AIProviderSpec, prompt: str) -> str:
     if provider == "gemini":
         candidates = parsed.get("candidates", [])
         if candidates and isinstance(candidates, list):
-            content = candidates[0].get("content", {}) if isinstance(candidates[0], dict) else {}
+            content = (
+                candidates[0].get("content", {})
+                if isinstance(candidates[0], dict)
+                else {}
+            )
             parts = content.get("parts", []) if isinstance(content, dict) else []
             if parts and isinstance(parts, list):
                 first = parts[0]

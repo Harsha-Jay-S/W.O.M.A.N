@@ -13,7 +13,10 @@ def run_setup() -> WomanConfig:
     print("Configure woman once, then it will keep the registry fresh.")
     ui_mode = prompt_choice(
         "Choose setup UI style:",
-        [Choice("rich", "Rich UI", "purple terminal panels if available"), Choice("basic", "Basic UI", "stdlib fallback")],
+        [
+            Choice("rich", "Rich UI", "purple terminal panels if available"),
+            Choice("basic", "Basic UI", "stdlib fallback"),
+        ],
         default="rich",
     )
     ai_provider = prompt_choice(
@@ -36,20 +39,29 @@ def run_setup() -> WomanConfig:
     elif ai_provider in {"openai", "anthropic", "gemini"}:
         backend = ai_provider
         api_key = prompt_text(f"{ai_provider.title()} API key", "")
-    auto_update = prompt_choice(
-        "Automatically refresh registry when PATH changes?",
-        [Choice("yes", "Yes"), Choice("no", "No")],
-        default="yes",
-    ) == "yes"
+    auto_update = (
+        prompt_choice(
+            "Automatically refresh registry when PATH changes?",
+            [Choice("yes", "Yes"), Choice("no", "No")],
+            default="yes",
+        )
+        == "yes"
+    )
     index_mode = prompt_choice(
         "Choose indexing mode:",
-        [Choice("jit", "Just-in-time", "index tools when needed"), Choice("batch", "Batch", "scan PATH now")],
+        [
+            Choice("jit", "Just-in-time", "index tools when needed"),
+            Choice("batch", "Batch", "scan PATH now"),
+        ],
         default="jit",
     )
     man_page_limit = int(
         prompt_choice(
             "Choose man-page extraction depth:",
-            [Choice("300", "First 300 lines", "default fast path"), Choice("0", "Entire man page", "for benchmarking")],
+            [
+                Choice("300", "First 300 lines", "default fast path"),
+                Choice("0", "Entire man page", "for benchmarking"),
+            ],
             default="300",
         )
     )
@@ -64,6 +76,12 @@ def run_setup() -> WomanConfig:
         man_page_limit=man_page_limit,
     )
     config.save()
-    provider = AIProviderSpec(provider=ai_provider, endpoint=endpoint, api_key=api_key, model=backend)
-    refresh_all(provider=provider, ai_mode=(ai_provider != "none" and index_mode == "batch"), man_page_limit=config.man_page_limit)
+    provider = AIProviderSpec(
+        provider=ai_provider, endpoint=endpoint, api_key=api_key, model=backend
+    )
+    refresh_all(
+        provider=provider,
+        ai_mode=(ai_provider != "none" and index_mode == "batch"),
+        man_page_limit=config.man_page_limit,
+    )
     return config

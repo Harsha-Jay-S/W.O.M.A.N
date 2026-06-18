@@ -7,15 +7,6 @@ from dataclasses import dataclass
 from typing import Iterable, Mapping, Sequence
 
 TOKEN_RE = re.compile(r"[A-Za-z0-9_./:-]+")
-DESTRUCTIVE_PATTERNS = (
-    r"\brm\b",
-    r"\bmkfs\b",
-    r"\bdd\b",
-    r"\bshutdown\b",
-    r"\breboot\b",
-    r"\bdel\b",
-    r"\bformat\b",
-)
 
 
 @dataclass(frozen=True)
@@ -62,8 +53,8 @@ def contains_any(text_value: object, patterns: Iterable[str]) -> int:
 
 
 def is_destructive_command(command_text: object) -> int:
-    text = normalize_text(command_text)
-    return int(any(re.search(pattern, text) for pattern in DESTRUCTIVE_PATTERNS))
+    from .safety import is_destructive_command as _safety_check
+    return _safety_check(command_text)
 
 
 def build_inference_frame(
@@ -79,7 +70,11 @@ def build_inference_frame(
 
     rows: list[dict[str, object]] = []
     for index, candidate in enumerate(candidates, start=1):
-        command = normalize_text(candidate.get("rendered") or candidate.get("command") or candidate.get("candidate_command"))
+        command = normalize_text(
+            candidate.get("rendered")
+            or candidate.get("command")
+            or candidate.get("candidate_command")
+        )
         row = {
             "query": normalize_text(query),
             "candidate_command": command,

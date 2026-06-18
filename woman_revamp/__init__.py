@@ -2,6 +2,8 @@
 
 from .engine import (
     MIN_CONFIDENCE,
+    TfIdfScorer,
+    WomanResult,
     call_local_registry,
     extract_intent,
     extract_numbers,
@@ -15,6 +17,8 @@ from .ml import WomanReranker
 
 __all__ = [
     "MIN_CONFIDENCE",
+    "TfIdfScorer",
+    "WomanResult",
     "call_local_registry",
     "extract_intent",
     "extract_numbers",

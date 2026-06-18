@@ -43,7 +43,11 @@ def _load_dynamic_registry() -> dict[str, dict]:
     commands = data.get("commands", {})
     if not isinstance(commands, dict):
         return {}
-    return {str(name): dict(spec) for name, spec in commands.items() if isinstance(spec, dict)}
+    return {
+        str(name): dict(spec)
+        for name, spec in commands.items()
+        if isinstance(spec, dict)
+    }
 
 
 @lru_cache(maxsize=8)

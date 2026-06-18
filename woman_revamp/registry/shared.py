@@ -2,7 +2,7 @@
 
 COMMANDS: dict[str, dict] = {
     "ls": {
-        "keywords": ["list", "files", "folders", "show", "hidden"],
+        "keywords": ["list", "files", "folders", "show", "hidden", "verbose", "directory"],
         "templates": {
             "basic": "ls",
             "long": "ls -la",
@@ -32,20 +32,27 @@ COMMANDS: dict[str, dict] = {
     },
     "cp": {
         "keywords": ["copy", "duplicate", "files", "folders"],
-        "templates": {"basic": "cp {source} {destination}", "recursive": "cp -r {source} {destination}"},
+        "templates": {
+            "basic": "cp {source} {destination}",
+            "recursive": "cp -r {source} {destination}",
+        },
         "intent_map": {"copy": "basic", "move": "basic"},
     },
     "mv": {
         "keywords": ["move", "rename", "relocate", "files", "folders"],
         "templates": {
             "basic": "mv {source} {destination}",
-            "rename": "for f in *.{from_ext}; do mv -- \"$f\" \"${f%.{from_ext}}.{to_ext}\"; done",
+            "rename": 'for f in *.{from_ext}; do mv -- "$f" "${f%.{from_ext}}.{to_ext}"; done',
         },
         "intent_map": {"move": "basic", "rename": "rename"},
     },
     "rm": {
         "keywords": ["delete", "remove", "erase", "files", "folders"],
-        "templates": {"basic": "rm {path}", "recursive": "rm -r {path}", "force": "rm -rf {path}"},
+        "templates": {
+            "basic": "rm {path}",
+            "recursive": "rm -r {path}",
+            "force": "rm -rf {path}",
+        },
         "intent_map": {"remove": "basic", "delete": "basic"},
     },
     "cat": {
@@ -69,7 +76,16 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"status": "basic", "list": "basic"},
     },
     "git": {
-        "keywords": ["version control", "commit", "branch", "merge", "stash", "clone", "diff", "undo"],
+        "keywords": [
+            "version control",
+            "commit",
+            "branch",
+            "merge",
+            "stash",
+            "clone",
+            "diff",
+            "undo",
+        ],
         "templates": {
             "status": "git status",
             "log": "git log --oneline --graph --decorate -n 10",
@@ -78,7 +94,13 @@ COMMANDS: dict[str, dict] = {
             "clone": "git clone {url}",
             "diff": "git diff",
         },
-        "intent_map": {"status": "status", "git": "status", "list": "branch", "search": "diff", "remove": "undo_commit"},
+        "intent_map": {
+            "status": "status",
+            "git": "status",
+            "list": "branch",
+            "search": "diff",
+            "remove": "undo_commit",
+        },
     },
     "docker": {
         "keywords": ["container", "image", "compose", "run", "build", "ps", "logs"],
@@ -89,10 +111,24 @@ COMMANDS: dict[str, dict] = {
             "run": "docker run --rm -it {image}",
             "compose_up": "docker compose up -d",
         },
-        "intent_map": {"list": "list", "run": "run", "start": "compose_up", "status": "list"},
+        "intent_map": {
+            "list": "list",
+            "run": "run",
+            "start": "compose_up",
+            "status": "list",
+        },
     },
     "curl": {
-        "keywords": ["http", "url", "request", "download", "api", "headers", "post", "get"],
+        "keywords": [
+            "http",
+            "url",
+            "request",
+            "download",
+            "api",
+            "headers",
+            "post",
+            "get",
+        ],
         "templates": {
             "get": "curl -L {url}",
             "download": "curl -L -o {file} {url}",

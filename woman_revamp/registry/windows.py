@@ -125,12 +125,18 @@ COMMANDS: dict[str, dict] = {
     },
     "Remove-Item": {
         "keywords": ["delete", "remove", "erase", "file"],
-        "templates": {"remove": "Remove-Item {path}", "force": "Remove-Item {path} -Recurse -Force"},
+        "templates": {
+            "remove": "Remove-Item {path}",
+            "force": "Remove-Item {path} -Recurse -Force",
+        },
         "intent_map": {"remove": "remove", "delete": "remove"},
     },
     "Get-NetTCPConnection": {
         "keywords": ["network", "port", "tcp", "connection", "listening"],
-        "templates": {"listening": "Get-NetTCPConnection -State Listen", "port": "Get-NetTCPConnection -LocalPort {port}"},
+        "templates": {
+            "listening": "Get-NetTCPConnection -State Listen",
+            "port": "Get-NetTCPConnection -LocalPort {port}",
+        },
         "intent_map": {"network": "port", "status": "listening"},
     },
     "Test-Connection": {
@@ -140,17 +146,26 @@ COMMANDS: dict[str, dict] = {
     },
     "icacls": {
         "keywords": ["permissions", "acl", "access"],
-        "templates": {"grant": "icacls {path} /grant {user}:F", "list": "icacls {path}"},
+        "templates": {
+            "grant": "icacls {path} /grant {user}:F",
+            "list": "icacls {path}",
+        },
         "intent_map": {"permissions": "list"},
     },
     "netsh": {
         "keywords": ["network", "interface", "dns", "proxy"],
-        "templates": {"interface": "netsh interface show interface", "dns": "netsh interface ip show dns"},
+        "templates": {
+            "interface": "netsh interface show interface",
+            "dns": "netsh interface ip show dns",
+        },
         "intent_map": {"network": "interface"},
     },
     "New-Item": {
         "keywords": ["create", "new", "file", "folder"],
-        "templates": {"file": "New-Item {path} -ItemType File", "dir": "New-Item {path} -ItemType Directory"},
+        "templates": {
+            "file": "New-Item {path} -ItemType File",
+            "dir": "New-Item {path} -ItemType Directory",
+        },
         "intent_map": {"create": "file"},
     },
 }

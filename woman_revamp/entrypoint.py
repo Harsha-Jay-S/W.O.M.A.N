@@ -16,9 +16,6 @@ def _print_user_error(exc: BaseException) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     try:
-        from .bootstrap import ensure_runtime_dependencies
-
-        ensure_runtime_dependencies()
         from .cli import main as cli_main
 
         return cli_main(argv)
