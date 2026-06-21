@@ -101,9 +101,9 @@ New registry modules:
 
 ## Known Constraints
 
-**ML model absent**: `woman_revamp/ml/models/woman_reranker.joblib` does not exist in the repo. `WomanReranker().available` is always `False`. The full reranking path is never exercised. Heuristic path handles all queries.
+**ML model absent (intentionally removed)**: `woman_revamp/ml/models/woman_reranker.joblib` is not in the repo — it was an inert optional artifact (loading it also needs `joblib`+`pandas`, usually absent), so it was deleted. `WomanReranker().available` is always `False`. The full reranking path is never exercised; `rerank_with_safety()` (`ml/safety.py`) does the ranking+safety adjustment instead. Heuristic BM25 path handles all queries.
 
-**Dynamic registry inflation**: Auto-indexed PATH tools can beat static registry entries for modifier-heavy queries (e.g., a tool with a `--verbose` template may outscore `ls` for "list files verbose"). The `tests/conftest.py` autouse fixture neutralizes this by patching `_load_dynamic_registry` to return `{}`. The conftest fixture also clears `_scorer_cache` and `_vocab_cache` alongside `get_registry.cache_clear()`.
+**Dynamic registry inflation (guarded)**: Auto-indexed PATH tools carry bloated man-page keywords/templates that can beat curated static entries (e.g. `cd-paranoia`'s `--force-*` templates outscoring `rm` for "delete … force"). Mitigations: (1) `_load_dynamic_registry` tags every dynamic spec with `"__dynamic__": True`; (2) `_score_command` multiplies such entries by `DYNAMIC_PENALTY = 0.6` *unless the user named the tool* (`name in query`), so curated commands win for intent queries while named-tool queries are unaffected. The `tests/conftest.py` autouse fixture still neutralizes the live cache by patching `_load_dynamic_registry` to return `{}` (and clears `_scorer_cache`/`_vocab_cache` alongside `get_registry.cache_clear()`); note this means existing tests exercise zero dynamic candidates, so the penalty is covered by dedicated tests in `tests/test_engine.py`.
 
 **Scoring thresholds**: `MIN_CONFIDENCE = 0.30` in `engine.py`. Project signal boosts (+0.20–0.30) are only applied when the command's base score exceeds 0.05, preventing zero-vocabulary-overlap commands from crossing the threshold due to project context alone.
 
@@ -116,3 +116,32 @@ New registry modules:
 | `WOMAN_SAFETY_OFF=1` | Skip all danger pattern checks |
 | `WOMAN_LEAN=1` | Disable Rich UI (plain text output) |
 | `WOMAN_DEBUG=1` | Include exception class in error messages |
+
+## Model Guide
+
+Claude Code does not auto-switch models — use `/model <id>` before starting a task. Pick by task type:
+
+| Model | ID | When to use |
+|---|---|---|
+| **Haiku 4.5** | `claude-haiku-4-5-20251001` | Single-file fixes, adding registry entries, quick test runs, typo/lint corrections |
+| **Sonnet 4.6** | `claude-sonnet-4-6` | Standard feature work, multi-file edits, debugging, most day-to-day tasks |
+| **Opus 4.8** | `claude-opus-4-8` | Complex architecture decisions, large refactors, Phase 4 subcommand rewrite, anything spanning 10+ files |
+
+### Per-phase recommendation (from PLAN.md)
+
+| Phase | Task | Model |
+|---|---|---|
+| Phase 1 | Compact banner, TTY detection, zero-config | Sonnet 4.6 |
+| Phase 1 | Safety danger badge + `--dry-run` | Sonnet 4.6 |
+| Phase 2 | TF-IDF scorer rewrite (`engine.py`) | Sonnet 4.6 |
+| Phase 2 | Remove bootstrap, active file prioritization | Haiku 4.5 |
+| Phase 2 | Standardized `WomanResult` JSON schema | Sonnet 4.6 |
+| Phase 3 | Rich multi-action confirm prompt | Sonnet 4.6 |
+| Phase 3 | Explain mode (`explain.py`) | Sonnet 4.6 |
+| Phase 3 | Manual mode (`manual.py`) | Haiku 4.5 |
+| Phase 4 | Full subcommand restructure (`cli.py` rewrite) | **Opus 4.8** |
+| Phase 4 | Shell integration generator | Sonnet 4.6 |
+| Any | Writing/expanding tests only | Haiku 4.5 |
+| Any | Security or architectural review | **Opus 4.8** |
+
+Switch with: `/model claude-opus-4-8` (or `claude-haiku-4-5-20251001` / `claude-sonnet-4-6`)

@@ -12,6 +12,9 @@ COMMANDS: dict[str, dict] = {
             "size",
             "delete",
             "older",
+            "remove",
+            "log",
+            "logs",
         ],
         "templates": {
             "name": "find {path} -name '{pattern}'",
@@ -26,16 +29,16 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"search": "name", "list": "directories", "remove": "delete"},
     },
     "lsof": {
-        "keywords": ["port", "socket", "network", "process", "open files", "listening"],
+        "keywords": ["port", "socket", "network", "process", "open files", "listening", "kill", "terminate"],
         "templates": {
             "port": "lsof -i :{port}",
             "process": "lsof -p {pid}",
             "all": "lsof -i",
         },
-        "intent_map": {"network": "port", "process": "process", "status": "all"},
+        "intent_map": {"network": "port", "process": "process", "status": "all", "kill": "port"},
     },
     "ss": {
-        "keywords": ["socket", "port", "listening", "network", "connections"],
+        "keywords": ["socket", "port", "listening", "network", "connections", "show"],
         "templates": {
             "listening": "ss -tulpn",
             "ports": "ss -ltnp",
@@ -87,7 +90,7 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"monitor": "follow", "status": "errors"},
     },
     "df": {
-        "keywords": ["disk", "space", "filesystem", "usage", "free", "storage", "how much"],
+        "keywords": ["disk", "space", "filesystem", "usage", "free", "storage", "how much", "check", "available", "capacity"],
         "templates": {
             "human": "df -h",
             "inode": "df -hi",
@@ -103,7 +106,7 @@ COMMANDS: dict[str, dict] = {
         "intent_map": {"disk": "summary", "status": "summary"},
     },
     "ps": {
-        "keywords": ["process", "processes", "pid", "memory", "cpu", "jobs", "running", "show"],
+        "keywords": ["process", "processes", "pid", "memory", "cpu", "jobs", "running", "show", "list"],
         "templates": {
             "tree": "ps auxf",
             "cpu": "ps aux --sort=-%cpu | head",

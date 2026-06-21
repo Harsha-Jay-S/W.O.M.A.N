@@ -85,6 +85,10 @@ COMMANDS: dict[str, dict] = {
             "clone",
             "diff",
             "undo",
+            "log",
+            "repository",
+            "history",
+            "changes",
         ],
         "templates": {
             "status": "git status",

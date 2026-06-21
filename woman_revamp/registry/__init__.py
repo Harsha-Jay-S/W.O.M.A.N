@@ -44,7 +44,7 @@ def _load_dynamic_registry() -> dict[str, dict]:
     if not isinstance(commands, dict):
         return {}
     return {
-        str(name): dict(spec)
+        str(name): {**spec, "__dynamic__": True}
         for name, spec in commands.items()
         if isinstance(spec, dict)
     }

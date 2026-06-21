@@ -42,6 +42,12 @@ _LANGUAGE_EXTENSIONS: dict[str, str] = {
     "markdown": "*.md",
     "yaml": "*.yaml",
     "json": "*.json",
+    "log": "*.log",
+    "logs": "*.log",
+    "config": "*.conf",
+    "conf": "*.conf",
+    "text": "*.txt",
+    "csv": "*.csv",
 }
 from .registry.pipes import PIPE_PATTERNS
 from .registry.runners import RUNNERS, RUNNABLE_EXTENSIONS
@@ -59,6 +65,11 @@ _PROJECT_BOOSTS: dict[str, tuple[set[str], float]] = {
 }
 
 MIN_CONFIDENCE = 0.30
+
+# Auto-indexed PATH tools (registry/__init__.py tags them "__dynamic__") carry
+# bloated man-page keywords/templates that can outscore curated static commands.
+# Down-weight them unless the user named the tool explicitly. See _score_command.
+DYNAMIC_PENALTY = 0.6
 STOP_WORDS = {
     "a",
     "an",
@@ -110,6 +121,15 @@ REQUIRED_PLACEHOLDERS = {
 _scorer_cache: dict[int, "TfIdfScorer"] = {}
 _vocab_cache: dict[int, list[str]] = {}
 
+# Stop words stripped before BM25 so filler words don't inflate max_possible
+_STOP_WORDS: frozenset[str] = frozenset({
+    "a", "all", "an", "and", "are", "as", "at", "be", "by", "can", "do",
+    "for", "from", "get", "have", "how", "in", "is", "it", "its", "just",
+    "me", "my", "no", "not", "of", "on", "or", "out", "please", "so",
+    "that", "the", "them", "there", "these", "they", "this", "to", "up",
+    "us", "use", "using", "was", "we", "what", "whatever", "which", "with",
+})
+
 
 class TfIdfScorer:
     """BM25 similarity scorer for command keywords (replaces TF-IDF)."""
@@ -132,19 +152,29 @@ class TfIdfScorer:
         if not query_tokens:
             return 0.0
         cmd_set = set(cmd_tokens)
-        qtf = Counter(query_tokens)
+        qtf = Counter(t for t in query_tokens if t not in _STOP_WORDS)
         dl = len(cmd_tokens)
         k1, b = 1.5, 0.75
         score = 0.0
         max_possible = 0.0
+        oov_match = 0
         for token, tf in qtf.items():
             df = self.doc_freq.get(token, 0)
+            if df == 0:
+                # OOV: skip from BM25 max_possible to avoid deflating scored terms
+                if token in cmd_set:
+                    oov_match += 1
+                continue
             idf = math.log((self.num_docs - df + 0.5) / (df + 0.5) + 1)
             bm25_tf = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / (self.avgdl or 1)))
             if token in cmd_set:
                 score += idf * bm25_tf
             max_possible += idf * bm25_tf
-        return score / (max_possible or 1)
+        if max_possible == 0.0:
+            # All query tokens OOV (empty registry or fully novel query) — fall back to exact overlap
+            total = len(qtf)
+            return oov_match / total if total > 0 else 0.0
+        return score / max_possible
 
 
 def _get_scorer(registry: Mapping[str, Mapping]) -> "TfIdfScorer":
@@ -837,6 +867,11 @@ def _score_command(
     if negations and (name.lower() in negations or any(k in negations for k in keywords)):
         score -= 0.40
 
+    # Dynamic-registry penalty — auto-indexed PATH tool that the user didn't name.
+    # Prevents bloated man-page specs from outranking curated static commands.
+    if spec.get("__dynamic__") and name.lower() not in query:
+        score *= DYNAMIC_PENALTY
+
     return min(score, 1.0), best_template
 
 
@@ -904,7 +939,14 @@ def _choose_template(
         )
         q_lower = query.lower()
         has_lang = any(lang in q_lower for lang in _LANGUAGE_EXTENSIONS)
+        has_delete_intent = any(i in intents for i in ("remove", "delete"))
         if ext_match or has_pattern_words or has_lang:
+            # Deletion intent + specific file pattern → prefer delete template first
+            if has_delete_intent and has_lang:
+                for key in ("delete", "name", "files", "type", "basic"):
+                    template = templates.get(key)
+                    if template:
+                        return template
             for key in ("name", "files", "type", "basic"):
                 template = templates.get(key)
                 if template:

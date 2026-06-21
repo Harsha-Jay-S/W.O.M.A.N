@@ -278,16 +278,15 @@ def parse_tool_with_ai(
     if not isinstance(templates_raw, dict) or not isinstance(keywords_raw, list):
         return parse_tool_jit(tool, man_page_limit=man_page_limit)
 
-    # Convert structured response into ParsedManPage options format
-    options: list[dict[str, str]] = []
-    for tmpl_key, tmpl_val in templates_raw.items():
-        options.append({"flag": tmpl_key, "argument": "", "line": str(tmpl_val)})
-
-    synopsis = str(parsed.get("synopsis", ""))
     keywords = [str(k) for k in keywords_raw if isinstance(k, str)] or [tool]
-    return ParsedManPage(
-        tool=tool, synopsis=synopsis, options=options, keywords=keywords
-    )
+    templates: dict[str, str] = {k: str(v) for k, v in templates_raw.items() if v}
+    if not templates:
+        templates = {"default": tool}
+    intent_map_raw = parsed.get("intent_map", {})
+    intent_map: dict[str, str] = {k: str(v) for k, v in intent_map_raw.items()} if isinstance(intent_map_raw, dict) else {}
+    if not intent_map:
+        intent_map = {"run": "default", "status": "default", "help": "help"}
+    return ToolSpec(keywords=keywords, templates=templates, intent_map=intent_map)
 
 
 def parse_tool(tool: str, man_page_limit: int = 300) -> ToolSpec:

@@ -89,18 +89,24 @@ class TestTfIdfScorer:
 
     def test_tfidf_rare_words_score_higher(self):
         reg = {
-            "common": {"keywords": ["a", "b", "c"]},
-            "specific": {"keywords": ["a", "rareword"]},
+            "common": {"keywords": ["file", "list", "copy"]},
+            "specific": {"keywords": ["file", "rareword"]},
         }
         sc = TfIdfScorer(reg)
-        score_a_vs_a = sc.tfidf(["a"], ["a"])
+        score_common_vs_common = sc.tfidf(["file"], ["file"])
         score_rare_vs_rare = sc.tfidf(["rareword"], ["rareword"])
-        assert score_rare_vs_rare == score_a_vs_a == 1.0
+        assert score_rare_vs_rare == score_common_vs_common == 1.0
 
     def test_tfidf_symmetric_not_guaranteed(self, tfidf: TfIdfScorer):
         ab = tfidf.tfidf(["find"], ["find", "grep"])
         ba = tfidf.tfidf(["find", "grep"], ["find"])
         assert ab != ba  # TF-IDF is asymmetric
+
+    def test_oov_tokens_do_not_deflate_score(self, tfidf: TfIdfScorer):
+        # "all" is out-of-vocabulary; adding it to a matching query must not lower the score.
+        score_without_oov = tfidf.tfidf(["find"], ["find"])
+        score_with_oov = tfidf.tfidf(["find", "all"], ["find"])
+        assert score_with_oov == score_without_oov  # OOV terms are uninformative
 
 
 class TestScoreCommand:
