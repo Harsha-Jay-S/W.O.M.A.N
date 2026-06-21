@@ -294,6 +294,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show the command and exit without executing",
     )
     parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Execute without the confirmation prompt; required to run non-interactively/piped",
+    )
+    parser.add_argument(
         "--explain",
         action="store_true",
         help="Show a structured breakdown of the command",
@@ -316,6 +322,7 @@ def build_subcommand_parser() -> argparse.ArgumentParser:
     sp.add_argument("--os", dest="os_name")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--dry-run", action="store_true")
+    sp.add_argument("-y", "--yes", action="store_true")
     sp.add_argument("--top", type=int, default=5)
 
     sp = subparsers.add_parser("list", help="List indexed commands")
@@ -482,6 +489,23 @@ def _handle_subcommand(args: argparse.Namespace) -> int:
     return None
 
 
+def resolve_action_mode(interactive: bool, yes: bool, danger_score: float) -> str:
+    """Decide how to handle a generated command.
+
+    Returns one of: "prompt" (show the menu), "execute" (run without asking),
+    "print" (don't run — show the command + a hint), "refuse" (block a dangerous
+    command). Closes the non-interactive auto-execute footgun: piped/scripted runs
+    do nothing unless --yes is passed, and --yes still refuses danger >= 0.85.
+    """
+    if yes:
+        if not interactive and danger_score >= 0.85:
+            return "refuse"
+        return "execute"
+    if not interactive:
+        return "print"
+    return "prompt"
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ensure_directories()
 
@@ -512,6 +536,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 legacy_argv.append("--json")
             if getattr(sub_args, "dry_run", False):
                 legacy_argv.append("--dry-run")
+            if getattr(sub_args, "yes", False):
+                legacy_argv.append("--yes")
             top = getattr(sub_args, "top", 5)
             if top != 5:
                 legacy_argv.extend(["--top", str(top)])
@@ -743,8 +769,27 @@ def main(argv: Sequence[str] | None = None) -> int:
             print("[Dry run] Command not executed.")
             return 0
 
+        # Non-interactive guard: don't auto-execute piped/scripted runs unless --yes.
+        mode = resolve_action_mode(sys.stdin.isatty(), args.yes, danger_score)
+        if mode == "refuse":
+            Console().print(danger_badge(danger_score, danger_reasons))
+            print(
+                "Refusing to auto-execute a dangerous command non-interactively. "
+                "Run it in a terminal to review.",
+                file=sys.stderr,
+            )
+            return 1
+        if mode == "print":
+            print(
+                "Non-interactive: command not executed. "
+                "Re-run with --yes to execute, or copy the command above."
+            )
+            return 0
+
         # Multi-action prompt loop
-        if str(decision.get("action", "confirm")) == "auto_accept" and danger_score < 0.85:
+        if mode == "execute":
+            action_key = "execute"
+        elif str(decision.get("action", "confirm")) == "auto_accept" and danger_score < 0.85:
             action_key = "execute"
         else:
             action_key = prompt_command_action(command, danger_score, danger_reasons)

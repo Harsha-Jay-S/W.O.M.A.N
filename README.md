@@ -90,7 +90,9 @@ The bare `woman "query"` form still works; these are the explicit subcommands:
 | `woman config` | Run the setup wizard |
 | `woman shell-integration [bash\|zsh\|fish]` | Print shell hook code |
 
-Flags: `--dry-run` (show, don't run), `--json` (raw scoring), `--list`, `--refresh-index`, `--index-tool <tool>`.
+Flags: `--dry-run` (show, don't run), `-y`/`--yes` (run without the confirmation prompt — **required** for piped/non-interactive use; dangerous commands are still refused), `--json` (raw scoring), `--list`, `--refresh-index`, `--index-tool <tool>`.
+
+> Safety: run interactively, `woman` always asks before executing. Run piped or in a script, it prints the command and does nothing unless you pass `--yes`.
 
 ### Supported AI providers
 - **`ollama`** — local models at `http://localhost:11434`. No API key, runs on your machine.
