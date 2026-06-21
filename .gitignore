@@ -8,3 +8,9 @@ venv/
 dist/
 build/
 *.egg-info/
+
+# Stray artifacts from running CLI/tools in-tree
+/--help
+*.dsc
+fonts.dir
+fonts.scale
