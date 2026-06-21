@@ -23,9 +23,6 @@ woman-revamp = "woman_revamp.entrypoint:main"
 [tool.setuptools]
 include-package-data = true
 
-[tool.setuptools.package-data]
-woman_revamp = ["ml/models/*.joblib"]
-
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["woman_revamp*"]

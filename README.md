@@ -28,7 +28,7 @@ So I built one over a weekend. Mostly for fun. Partly out of spite.
 You type what you want in plain English. `woman` grabs context first — your OS, the files in your current directory, your last 5 shell commands — and builds a command for your exact setup.
 
 - **No SDK dependencies.** Uses native Python `urllib` to talk to LLMs. Boots fast.
-- **Self-installing UI.** Uses `rich` and `questionary` for a purple terminal interface. If they're missing, it asks to install them.
+- **Optional rich UI.** Uses `rich` and `questionary` for a purple terminal interface (installed via the `[ui]` extra). If they're missing, it falls back to plain text automatically — no prompt, no crash.
 - **Reads your `$PATH`.** It knows what tools you actually have.
 - **Parses man pages on the fly.** If a tool isn't indexed, it pulls the first 300 lines of the man page and works from there — heuristics or AI, depending on your config.
 - **Works offline.** No LLM provider set up? It falls back to local heuristic matching.
@@ -74,6 +74,24 @@ woman "undo my last git commit"         # Normal usage
 woman --json "what is using port 8080"  # Output raw scoring JSON
 ```
 
+### Subcommands
+
+The bare `woman "query"` form still works; these are the explicit subcommands:
+
+| Command | What it does |
+|---|---|
+| `woman search "<query>"` | Translate a query (alias: `woman s`) |
+| `woman explain "<query>"` | Show the command + flag breakdown, don't run it |
+| `woman why "<query>"` | Scoring breakdown for debugging matches |
+| `woman manual <cmd>` | Show the man page (alias: `woman man`) |
+| `woman list` | List indexed commands |
+| `woman index refresh \| list \| add <tool>` | Manage the PATH index |
+| `woman history` / `woman redo` | Recent queries / re-run last executed |
+| `woman config` | Run the setup wizard |
+| `woman shell-integration [bash\|zsh\|fish]` | Print shell hook code |
+
+Flags: `--dry-run` (show, don't run), `--json` (raw scoring), `--list`, `--refresh-index`, `--index-tool <tool>`.
+
 ### Supported AI providers
 - **`ollama`** — local models at `http://localhost:11434`. No API key, runs on your machine.
 - **`openai`** — GPT-4o, etc.
@@ -117,9 +135,8 @@ woman "your query"
  Print command in purple UI
        │
        ▼
- "Execute this command? (y/n)"
-       │
-      y/n
+ Confirm: Execute / Copy / Edit / Cancel
+ (dangerous command → Review / Execute anyway / Edit / Cancel)
        │
        ▼
  subprocess → your shell → output
