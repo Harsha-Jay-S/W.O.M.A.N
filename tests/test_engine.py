@@ -238,3 +238,23 @@ def test_curated_static_beats_noisy_dynamic_tool(monkeypatch):
     top = results[0]["command"]
     assert top != "noisetool", f"junk dynamic tool must not win: {results[:2]}"
     assert top in ("rm", "find"), f"expected curated rm/find on top, got {top}: {results[:2]}"
+
+
+# ── Bug 7: quoted arg from shell-history context used as a file path ───────────
+
+def test_shell_history_quoted_arg_not_used_as_path():
+    """A quoted string from a prior shell command (e.g. `ollama run m "What is 2+2?"`)
+    must NOT be extracted as the {path} of a generated command. Only quoted strings
+    in the user's own query are paths."""
+    ctx = (
+        "Current directory: /home/u\n"
+        "Files in directory:\n"
+        'Recent shell history:\n'
+        'ollama run qwen2.5-coder:7b --verbose "What is 2+2?"'
+    )
+    rendered = call_local_registry(
+        "find all python files modified today", context=ctx, os_info="linux"
+    )
+    assert rendered is not None
+    assert "2+2" not in rendered, f"history quoted arg leaked into path: {rendered}"
+    assert "What is" not in rendered, f"history quoted arg leaked into path: {rendered}"

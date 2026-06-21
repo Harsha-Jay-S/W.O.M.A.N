@@ -419,13 +419,19 @@ def extract_modifier_flags(query: str) -> str:
     return " ".join(flags)
 
 
-def _find_paths(text: str) -> list[str]:
+def _find_paths(query: str, context_text: str = "") -> list[str]:
     candidates: list[str] = []
-    for quoted in QUOTED_RE.findall(text):
+    # Quoted strings are treated as paths only when they come from the user's own
+    # query. Shell-history context routinely contains quoted args from prior
+    # commands (e.g. `ollama run m "What is 2+2?"`) that are not file paths.
+    for quoted in QUOTED_RE.findall(query):
         candidate = next((item for item in quoted if item), "")
         if candidate:
             candidates.append(candidate)
-    candidates.extend(PATH_RE.findall(text))
+    candidates.extend(PATH_RE.findall(query))
+    # Genuine path-like tokens (leading /, ./, drive letters, dotted extensions)
+    # are safe to harvest from context too.
+    candidates.extend(PATH_RE.findall(context_text))
     return [item for item in dict.fromkeys(candidates) if item]
 
 
@@ -650,7 +656,7 @@ def _infer_slots(
     if urls:
         slots["url"] = urls[0]
 
-    paths = _find_paths(text)
+    paths = _find_paths(query, _flatten(context))
     if paths:
         slots["file"] = paths[0]
         slots["path"] = paths[0]
