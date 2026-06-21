@@ -69,7 +69,7 @@ def _show_no_match(
     """Print did-you-mean suggestions or example queries when no match found."""
     from .engine import MIN_CONFIDENCE
     console = get_console()
-    console.print(f'\n[bold red]No confident match[/bold red] for [italic]"{query}"[/italic]\n')
+    console.print(f'\n[bold #e1306c]No confident match[/bold #e1306c] for [italic]"{query}"[/italic]\n')
 
     # Near-miss: show closest matches if any scored > 0
     near = [c for c in candidates if float(c.get("score", 0.0)) > 0.0]
@@ -468,7 +468,8 @@ def _handle_subcommand(args: argparse.Namespace) -> int:
             return 0
         if action == "add":
             show_progress(f"Indexing {args.tool}...")
-            index_one(args.tool, provider=provider, ai_mode=False, man_page_limit=300)
+            use_ai = provider is not None and provider.provider not in ("none", "")
+            index_one(args.tool, provider=provider, ai_mode=use_ai, man_page_limit=300)
             print(f"indexed {args.tool}")
             return 0
         if action == "list":

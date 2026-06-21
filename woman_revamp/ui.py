@@ -16,7 +16,16 @@ try:
 except ImportError:
     _RICH_AVAILABLE = False
 
-PURPLE_STOPS = ["#7c3aed", "#8b5cf6", "#a855f7", "#c084fc", "#e879f9"]
+PURPLE_STOPS = ["#5851db", "#833ab4", "#c13584", "#e1306c", "#fd1d1d"]
+
+BANNER_ART = r"""
+██╗    ██╗ ██████╗ ███╗   ███╗ █████╗ ███╗   ██╗
+██║    ██║██╔═══██╗████╗ ████║██╔══██╗████╗  ██║
+██║ █╗ ██║██║   ██║██╔████╔██║███████║██╔██╗ ██║
+██║███╗██║██║   ██║██║╚██╔╝██║██╔══██║██║╚██╗██║
+╚███╔███╔╝╚██████╔╝██║ ╚═╝ ██║██║  ██║██║ ╚████║
+ ╚══╝╚══╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝  ╚═══╝
+""".strip("\n").splitlines()
 
 
 class _PlainConsole:
@@ -52,16 +61,65 @@ def _terminal_width() -> int:
     return shutil.get_terminal_size(fallback=(80, 24)).columns
 
 
+def _lerp_hex(a: str, b: str, t: float) -> str:
+    ar, ag, ab = int(a[1:3], 16), int(a[3:5], 16), int(a[5:7], 16)
+    br, bg, bb = int(b[1:3], 16), int(b[3:5], 16), int(b[5:7], 16)
+    r = round(ar + (br - ar) * t)
+    g = round(ag + (bg - ag) * t)
+    bl = round(ab + (bb - ab) * t)
+    return f"#{r:02x}{g:02x}{bl:02x}"
+
+
+def _column_color(col: int, width: int) -> str:
+    if width <= 1:
+        return PURPLE_STOPS[0]
+    t = col / (width - 1)
+    seg = t * (len(PURPLE_STOPS) - 1)
+    i = min(int(seg), len(PURPLE_STOPS) - 2)
+    return _lerp_hex(PURPLE_STOPS[i], PURPLE_STOPS[i + 1], seg - i)
+
+
 def gradient_text(lines: Iterable[str]) -> str:
-    return "\n".join(lines)
+    """Render lines with a horizontal per-column Instagram-purple gradient.
+
+    Color is keyed on the global column index so the same column shares one hue
+    across all rows. Spaces are emitted raw (no glyph); the returned string is
+    Rich markup, which ``_PlainConsole`` strips back to raw art when Rich is
+    absent.
+    """
+    lines = list(lines)
+    width = max((len(line) for line in lines), default=0)
+    out: list[str] = []
+    for line in lines:
+        parts: list[str] = []
+        run_chars: list[str] = []
+        run_color: str | None = None
+        for col, ch in enumerate(line):
+            if ch == " ":
+                if run_chars:
+                    parts.append(f"[{run_color}]{''.join(run_chars)}[/]")
+                    run_chars = []
+                    run_color = None
+                parts.append(" ")
+                continue
+            color = _column_color(col, width)
+            if color != run_color and run_chars:
+                parts.append(f"[{run_color}]{''.join(run_chars)}[/]")
+                run_chars = []
+            run_color = color
+            run_chars.append(ch)
+        if run_chars:
+            parts.append(f"[{run_color}]{''.join(run_chars)}[/]")
+        out.append("".join(parts))
+    return "\n".join(out)
 
 
 def show_banner() -> None:
-    get_console().print("[bold #c084fc]woman[/bold #c084fc] [dim #e879f9]purple edition[/dim #e879f9]")
+    get_console().print(gradient_text(BANNER_ART), highlight=False)
 
 
 def show_progress(message: str) -> None:
-    get_console().print(f"[bold #c084fc]{message}[/bold #c084fc]")
+    get_console().print(f"[bold #c13584]{message}[/bold #c13584]")
 
 
 def confidence_label(score: float) -> str:

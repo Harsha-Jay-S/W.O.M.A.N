@@ -34,9 +34,16 @@ def run_setup() -> WomanConfig:
     endpoint = ""
     api_key = ""
     if ai_provider == "ollama":
-        backend = "ollama"
         endpoint = prompt_text("Ollama endpoint", "http://localhost:11434")
-    elif ai_provider in {"openai", "anthropic", "gemini"}:
+        backend = prompt_text("Model name", "llama3")
+    elif ai_provider == "openai":
+        api_key = prompt_text("OpenAI API key (blank if using local endpoint)", "")
+        endpoint = prompt_text(
+            "Custom base URL (blank = OpenAI default, include /chat/completions)",
+            "",
+        )
+        backend = prompt_text("Model name", "gpt-4o-mini")
+    elif ai_provider in {"anthropic", "gemini"}:
         backend = ai_provider
         api_key = prompt_text(f"{ai_provider.title()} API key", "")
     auto_update = (
