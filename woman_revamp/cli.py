@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -34,12 +35,12 @@ from .ui import (
     Choice,
     Console,
     auto_detect_lean_mode,
-    confidence_label,
     danger_badge,
     get_console,
     prompt_choice,
     prompt_command_action,
     prompt_text,
+    render_command_panel,
     show_banner,
     show_progress,
     spinner,
@@ -130,34 +131,85 @@ def _ask_ai_directly(
     return raw
 
 
-def _copy_to_clipboard(command: str) -> bool:
-    """Copy command to OS clipboard. Returns True on success."""
+def _osc52_copy(command: str, is_tty: bool, tmux: bool) -> bool:
+    """Copy via the OSC 52 terminal escape (no helper binary needed).
+
+    Works over SSH and in most modern terminals; tmux/screen need a passthrough
+    wrapper.  No-ops (returns False) when stdout is not a TTY.
+    """
+    if not is_tty:
+        return False
+    import base64
+
+    payload = base64.b64encode(command.encode()).decode()
+    seq = f"\x1b]52;c;{payload}\x07"
+    if tmux:
+        # tmux passthrough: wrap the sequence so it reaches the outer terminal.
+        seq = "\x1bPtmux;" + seq.replace("\x1b", "\x1b\x1b") + "\x1b\\"
+    sys.stdout.write(seq)
+    sys.stdout.flush()
+    return True
+
+
+def _run_clipboard_helper(argv: list[str], command: str) -> bool:
+    """Run a clipboard helper, detached so its fds never hold woman's terminal."""
+    proc = subprocess.run(
+        argv,
+        input=command.encode(),
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    return proc.returncode == 0
+
+
+def _copy_both_selections(clipboard_argv: list[str], primary_argv: list[str], command: str) -> bool:
+    """Set the clipboard AND the X11/Wayland *primary* selection.
+
+    Middle-click paste reads the primary selection, while Ctrl+(Shift+)V reads
+    the clipboard — they are independent buffers. Setting only the clipboard is
+    why "I clicked Copy but nothing pasted" happens with middle-click. The
+    primary copy is best-effort: its failure must not fail the whole copy.
+    """
+    ok = _run_clipboard_helper(clipboard_argv, command)
     try:
-        if sys.platform == "darwin" and shutil.which("pbcopy"):
-            proc = subprocess.run(["pbcopy"], input=command.encode(), check=True)
-            return proc.returncode == 0
-        if sys.platform.startswith("linux"):
-            if shutil.which("wl-copy"):
-                proc = subprocess.run(["wl-copy"], input=command.encode(), check=True)
-                return proc.returncode == 0
-            if shutil.which("xclip"):
-                proc = subprocess.run(
-                    ["xclip", "-selection", "clipboard"],
-                    input=command.encode(), check=True,
-                )
-                return proc.returncode == 0
-            if shutil.which("xsel"):
-                proc = subprocess.run(
-                    ["xsel", "--clipboard", "--input"],
-                    input=command.encode(), check=True,
-                )
-                return proc.returncode == 0
-        if sys.platform == "win32" and shutil.which("clip"):
-            proc = subprocess.run(["clip"], input=command.encode(), check=True)
-            return proc.returncode == 0
+        _run_clipboard_helper(primary_argv, command)
     except (subprocess.CalledProcessError, OSError):
         pass
-    return False
+    return ok
+
+
+def _copy_to_clipboard(command: str) -> bool:
+    """Copy command to the clipboard.
+
+    Tries a native helper first (pbcopy/wl-copy/xclip/xsel/clip); if none is
+    available, falls back to an OSC 52 terminal escape so copy still works over
+    SSH, in bare TTYs, and in minimal environments with no helper installed.
+    """
+    try:
+        if sys.platform == "darwin" and shutil.which("pbcopy"):
+            return _run_clipboard_helper(["pbcopy"], command)
+        if sys.platform.startswith("linux"):
+            if shutil.which("wl-copy"):
+                return _copy_both_selections(["wl-copy"], ["wl-copy", "--primary"], command)
+            if shutil.which("xclip"):
+                return _copy_both_selections(
+                    ["xclip", "-selection", "clipboard"],
+                    ["xclip", "-selection", "primary"], command,
+                )
+            if shutil.which("xsel"):
+                return _copy_both_selections(
+                    ["xsel", "--clipboard", "--input"],
+                    ["xsel", "--primary", "--input"], command,
+                )
+        if sys.platform == "win32" and shutil.which("clip"):
+            return _run_clipboard_helper(["clip"], command)
+    except (subprocess.CalledProcessError, OSError):
+        pass
+
+    # No helper (or it failed) → terminal-native OSC 52 fallback.
+    return _osc52_copy(command, is_tty=sys.stdout.isatty(), tmux=bool(os.environ.get("TMUX")))
 
 
 def _command_comment(intents: list[str], signals: dict[str, object], rendered: str) -> str:
@@ -742,27 +794,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         decision = {**decision, "danger_score": d_score, "danger_reasons": d_reasons}
 
     if command:
-        # Extract signals + intents for inline comment
+        # Finalize: correct scope (per-folder archives, portability), detect
+        # collisions, and derive risk from the *actual* command. Single chokepoint.
+        from .finalize import finalize_command
         intents_for_comment = list(extract_intent(query))
+        fin = finalize_command(query, command, intents_for_comment, cwd=os.getcwd())
+        command = fin.command
+
         signals_for_comment = dict(extract_numbers(query))
         inline_comment = _command_comment(intents_for_comment, signals_for_comment, command)
 
-        conf_score = float(
-            decision.get("score")
-            or (candidates[0].get("score") if candidates else 0.0)
-            or 0.0
-        )
+        # Risk (not confidence) drives the panel and the safety gating.
+        danger_score = fin.risk_score
+        danger_reasons = fin.risk_reasons
 
         get_console().print()
-        get_console().print(syntax_block(command))
-        get_console().print(f"[dim]{inline_comment}[/dim]")
-        get_console().print(confidence_label(conf_score))
-
-        # Safety badge for destructive commands
-        danger_score = float(decision.get("danger_score", 0.0))
-        danger_reasons = list(decision.get("danger_reasons", []))
-        if danger_score >= 0.4 and danger_reasons:
-            Console().print(danger_badge(danger_score, danger_reasons))
+        get_console().print(render_command_panel(
+            fin.restatement, command, fin.risk_level, fin.overwrite, fin.collisions,
+        ))
+        # Inline verb comment only adds value for simple one-liners; for a
+        # transformed/multi-line command the panel restatement already explains it.
+        if inline_comment and "\n" not in command:
+            get_console().print(f"[dim]{inline_comment}[/dim]")
 
         # Dry run — show command and exit
         if args.dry_run:
@@ -862,22 +915,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         with spinner("Asking AI..."):
             ai_command = _ask_ai_directly(query, context, os_name, config)
         if ai_command:
-            from .ml.safety import calculate_danger_score as _calc_danger2
-            ai_danger, ai_reasons = _calc_danger2(ai_command)
-            decision = {"danger_score": ai_danger, "danger_reasons": ai_reasons, "score": 0.5}
-            candidates = [{"command": ai_command, "score": 0.5, "rendered": ai_command,
-                           "template": "ai_direct", "intent": None, "source": "ai"}]
-            command = ai_command
-            # Re-enter the command display + action loop
+            from .finalize import finalize_command
             intents_for_comment = list(extract_intent(query))
+            fin = finalize_command(query, ai_command, intents_for_comment, cwd=os.getcwd())
+            command = fin.command
+            ai_danger, ai_reasons = fin.risk_score, fin.risk_reasons
+            decision = {"danger_score": ai_danger, "danger_reasons": ai_reasons, "score": 0.5}
+            candidates = [{"command": command, "score": 0.5, "rendered": command,
+                           "template": "ai_direct", "intent": None, "source": "ai"}]
+            # Re-enter the command display + action loop
             signals_for_comment = dict(extract_numbers(query))
             inline_comment = _command_comment(intents_for_comment, signals_for_comment, command)
             get_console().print()
-            get_console().print(syntax_block(command))
-            get_console().print(f"[dim]{inline_comment}[/dim]")
+            get_console().print(render_command_panel(
+                fin.restatement, command, fin.risk_level, fin.overwrite, fin.collisions,
+            ))
+            if inline_comment and "\n" not in command:
+                get_console().print(f"[dim]{inline_comment}[/dim]")
             get_console().print(f"[dim](source: AI — {config.ai_provider})[/dim]")
-            if ai_danger >= 0.4 and ai_reasons:
-                Console().print(danger_badge(ai_danger, ai_reasons))
             if not args.dry_run:
                 action_key = prompt_command_action(command, ai_danger, ai_reasons)
                 if action_key in ("cancel", "abort"):

@@ -9,11 +9,25 @@ from dataclasses import dataclass
 
 try:
     from rich.console import Console as _Console
+    from rich.console import Group as _Group
+    from rich.panel import Panel as _Panel
     from rich.syntax import Syntax as _Syntax
     from rich.text import Text as _Text
     _RICH_AVAILABLE = True
 except ImportError:
     _RICH_AVAILABLE = False
+
+# Accent colors pulled from the banner gradient (orange → magenta) so the
+# interactive UI shares the brand palette.
+ACCENT_ORANGE = "#f09433"
+ACCENT_PINK = "#cc2366"
+ACCENT_MAGENTA = "#bc1888"
+
+_RISK_STYLES = {
+    "High": "bold red",
+    "Moderate": "bold yellow",
+    "Low": "bold green",
+}
 
 
 class _PlainConsole:
@@ -133,9 +147,37 @@ def prompt_choice(message: str, choices: list[Choice], default: str = "") -> str
             )
             for choice in choices
         ]
-        answer = questionary.select(
-            message, choices=prompt_choices, default=default or choices[0].key
-        ).ask()
+        # Single, brand-colored selection indicator: recolor the row highlight
+        # to the banner gradient and replace the default `»` with a thin marker.
+        style = None
+        try:
+            from questionary import Style as _QStyle
+
+            style = _QStyle([
+                ("qmark", f"fg:{ACCENT_ORANGE} bold"),
+                ("question", "bold"),
+                ("pointer", f"fg:{ACCENT_MAGENTA} bold"),
+                ("highlighted", f"fg:{ACCENT_MAGENTA} bold"),
+                ("selected", f"fg:{ACCENT_PINK}"),
+                ("answer", f"fg:{ACCENT_PINK} bold"),
+            ])
+        except Exception:
+            style = None
+
+        select_kwargs: dict[str, object] = {
+            "choices": prompt_choices,
+            "default": default or choices[0].key,
+        }
+        if style is not None:
+            select_kwargs["style"] = style
+            select_kwargs["pointer"] = "›"
+        try:
+            answer = questionary.select(message, **select_kwargs).ask()
+        except TypeError:
+            # Older questionary without style/pointer kwargs.
+            answer = questionary.select(
+                message, choices=prompt_choices, default=default or choices[0].key
+            ).ask()
         return choices[0].key if answer is None else str(answer)
     except Exception:
         print(message)
@@ -198,6 +240,52 @@ def syntax_block(command: str) -> object:
     return command
 
 
+def risk_label(level: str) -> object:
+    """Return a styled risk badge (``● Low`` / ``● Moderate`` / ``● High``)."""
+    text = f"● {level}"
+    if _RICH_AVAILABLE:
+        return _Text(text, style=_RISK_STYLES.get(level, "dim"))
+    return text
+
+
+def render_command_panel(
+    restatement: str,
+    command: str,
+    risk_level: str,
+    overwrite: bool = False,
+    collisions: list[str] | None = None,
+) -> object:
+    """Render the restated intent + command + risk as one bordered panel.
+
+    Falls back to a plain multi-line string when Rich is unavailable.
+    """
+    collisions = collisions or []
+    if not _RICH_AVAILABLE:
+        lines = [f"Interpreting as: {restatement}" if restatement else "", command, f"Risk: ● {risk_level}"]
+        if overwrite and collisions:
+            lines.append(f"⚠ Overwrites: {', '.join(collisions)}")
+        return "\n".join(line for line in lines if line)
+
+    rows: list[object] = []
+    if restatement:
+        rows.append(_Text(restatement, style="italic"))
+        rows.append(_Text(""))
+    rows.append(syntax_block(command))
+    rows.append(_Text(""))
+    risk_line = _Text("Risk: ", style="dim")
+    risk_line.append_text(risk_label(risk_level))
+    rows.append(risk_line)
+    if overwrite and collisions:
+        rows.append(_Text(f"⚠ Overwrites: {', '.join(collisions)}", style="bold yellow"))
+    return _Panel(
+        _Group(*rows),
+        border_style=ACCENT_PINK,
+        padding=(1, 2),
+        title="[dim]woman[/dim]",
+        title_align="left",
+    )
+
+
 def prompt_command_action(
     command: str, danger_score: float = 0.0, danger_reasons: list[str] | None = None
 ) -> str:
@@ -210,18 +298,18 @@ def prompt_command_action(
             [
                 Choice("review",  "⚠ Review",         "" if narrow else "inspect command + danger info"),
                 Choice("execute", "▶ Execute anyway",  "" if narrow else "run despite danger"),
-                Choice("edit",    "✏ Edit",            "" if narrow else "modify before running"),
+                Choice("edit",    "✎ Edit",            "" if narrow else "modify before running"),
                 Choice("cancel",  "✕ Cancel",          "" if narrow else "do nothing"),
             ],
             default="review",
         )
 
     return prompt_choice(
-        f"Command: {command}",
+        "Choose an action",
         [
             Choice("execute", "▶ Execute", "" if narrow else "run the command now"),
-            Choice("copy",    "⎘ Copy",    "" if narrow else "copy to clipboard"),
-            Choice("edit",    "✏ Edit",    "" if narrow else "modify before running"),
+            Choice("copy",    "⧉ Copy",    "" if narrow else "copy to clipboard"),
+            Choice("edit",    "✎ Edit",    "" if narrow else "modify before running"),
             Choice("cancel",  "✕ Cancel",  "" if narrow else "do nothing"),
         ],
         default="execute",

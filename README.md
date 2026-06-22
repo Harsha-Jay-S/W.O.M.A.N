@@ -92,7 +92,7 @@ The bare `woman "query"` form still works; these are the explicit subcommands:
 
 Flags: `--dry-run` (show, don't run), `-y`/`--yes` (run without the confirmation prompt — **required** for piped/non-interactive use; dangerous commands are still refused), `--json` (raw scoring), `--list`, `--refresh-index`, `--index-tool <tool>`.
 
-> Safety: run interactively, `woman` always asks before executing. Run piped or in a script, it prints the command and does nothing unless you pass `--yes`.
+> Safety: before running, `woman` shows a panel that **restates how it interpreted you** (e.g. "zip *each top-level folder into its own archive* — edit if you meant one combined archive"), a **risk level** computed from the actual command, and an **overwrite warning** if the output files already exist. Run interactively, it always asks before executing. Run piped or in a script, it prints the command and does nothing unless you pass `--yes` (dangerous commands are refused even then).
 
 ### Supported AI providers
 - **`ollama`** — local models at `http://localhost:11434`. No API key, runs on your machine.

@@ -38,9 +38,11 @@ Query
   → context.py       (shell history + active files as list[Path] + project signals)
   → engine.py        (tokenize → typo correct → synonym expand → pre-filter →
                        BM25 score → modifier flags → negation → template render)
+  → finalize.py      (scope correction + path portability + collision check +
+                       risk-from-actual-command — single post-render chokepoint)
   → ml/safety.py     (danger scoring — always runs, no ML model required)
   → [optional] ml/reranker.py (sklearn joblib model — disabled if model file absent)
-  → cli.py           (4-option prompt: Execute / Copy / Edit / Cancel)
+  → cli.py           (risk panel + 4-option prompt: Execute / Copy / Edit / Cancel)
 ```
 
 **Key scoring components in `engine.py`:**
@@ -100,6 +102,12 @@ New registry modules:
 - `append_history()`, `load_history(n)`, `last_executed()` — `last_executed()` finds most recent entry where `action == "execute"`
 
 ## Known Constraints
+
+**Finalize layer (`finalize.py`)**: `finalize_command(query, command, intents, cwd)` runs after template render and before display/exec. It is the single place that corrects archive *scope* (`"all folders"` → per-folder loop over `*/`, not one archive of everything incl. loose/hidden files; merge words like `"into one"`/`"combined"` → one combined archive), rewrites absolute-cwd paths to `.`, detects output-file collisions (flags `overwrite`, never silently clobbers), and computes `risk_level`/`risk_score` from the *actual* command (`calculate_danger_score` + collision bump). The archive op is detected from the **command verb** (`zip`/`tar -c`), not `intents` — `"zip"` is not a compress synonym so `extract_intent` returns `[]` for it. The generated per-folder loop is **POSIX-portable** (`for d in */; do [ -d "$d" ] || continue; …; done`, no `shopt`/nullglob) because woman executes via `subprocess.run(..., shell=True)` → `/bin/sh`, which may be dash. A heuristic translator can't be provably correct, so correctness rests on three things: this single chokepoint, the falsifiable `Interpreting as: …` restatement shown in the panel (human catches wrong scope), and the golden-query regression corpus (`tests/test_golden_queries.py`) where every found edge case becomes a permanent property assertion (no abs-cwd leak, no `rm -rf /`, risk consistent with score, restatement present).
+
+**Clipboard copy (`cli.py:_copy_to_clipboard`)**: tries a native helper first (`pbcopy`/`wl-copy`/`xclip`/`xsel`/`clip`, run detached via `start_new_session=True` + `DEVNULL` so a forked daemon never holds woman's fds), then falls back to an **OSC 52** terminal escape (`_osc52_copy`) so copy works with zero helper binaries (SSH, bare TTY, minimal containers); tmux gets a passthrough wrap. OSC 52 only fires on a TTY. On Linux, `_copy_both_selections` sets the **clipboard AND the primary selection** (`wl-copy --primary` / `xclip -selection primary` / `xsel --primary`) — middle-click paste reads *primary* while Ctrl+(Shift+)V reads *clipboard*; setting only clipboard was the actual "I clicked Copy but middle-click pasted nothing" bug (verified via a pty repro of the real questionary flow). The primary copy is best-effort and never fails the overall copy.
+
+**Risk panel, not confidence (`ui.py`)**: `render_command_panel(restatement, command, risk_level, overwrite, collisions)` draws one bordered Rich panel (restated intent + syntax-highlighted command + `Risk: ● …` + `⚠ Overwrites: …`). `confidence_label` is no longer shown in the command panel — `risk_label` (from the actual command) replaces it. The questionary menu below uses banner-gradient accent styling (`ACCENT_ORANGE`/`ACCENT_PINK`/`ACCENT_MAGENTA`), a thin `›` pointer, and glyphs `▶ ⧉ ✎ ✕`. Falls back to plain text / numbered list without Rich/questionary.
 
 **ML model absent (intentionally removed)**: `woman_revamp/ml/models/woman_reranker.joblib` is not in the repo — it was an inert optional artifact (loading it also needs `joblib`+`pandas`, usually absent), so it was deleted. `WomanReranker().available` is always `False`. The full reranking path is never exercised; `rerank_with_safety()` (`ml/safety.py`) does the ranking+safety adjustment instead. Heuristic BM25 path handles all queries.
 
